@@ -59,7 +59,9 @@ class PyodideManager {
 
     // Check if the normalized path is still within the workspace
     if (!normalized.startsWith(VIRTUAL_WORKSPACE + "/") && normalized !== VIRTUAL_WORKSPACE) {
-      throw new Error(`Invalid path: Path traversal detected. Path must be within ${VIRTUAL_WORKSPACE}`);
+      throw new Error(
+        `Invalid path: Path traversal detected. Path must be within ${VIRTUAL_WORKSPACE}`
+      );
     }
 
     // Additional check: reject paths containing '..' after normalization
@@ -109,7 +111,7 @@ class PyodideManager {
     if (currentSize + fileSize > MAX_WORKSPACE_SIZE) {
       throw new Error(
         `Workspace size limit exceeded. Current: ${(currentSize / 1024 / 1024).toFixed(2)}MB, ` +
-        `Limit: ${(MAX_WORKSPACE_SIZE / 1024 / 1024).toFixed(2)}MB`
+          `Limit: ${(MAX_WORKSPACE_SIZE / 1024 / 1024).toFixed(2)}MB`
       );
     }
   }
@@ -126,7 +128,7 @@ class PyodideManager {
     }
 
     this.initializationPromise = this.doInitialize();
-    
+
     try {
       return await this.initializationPromise;
     } catch (error) {
@@ -153,7 +155,9 @@ class PyodideManager {
       console.error("[Pyodide] micropip loaded successfully");
     } catch (error) {
       console.error("[Pyodide] Failed to load micropip:", error);
-      throw new Error(`Failed to load micropip: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to load micropip: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
 
     // Verify micropip is actually available
@@ -161,12 +165,14 @@ class PyodideManager {
       this.pyodide.pyimport("micropip");
     } catch (error) {
       console.error("[Pyodide] micropip verification failed:", error);
-      throw new Error("micropip was loaded but cannot be imported. This may indicate a Pyodide installation issue.");
+      throw new Error(
+        "micropip was loaded but cannot be imported. This may indicate a Pyodide installation issue."
+      );
     }
 
     // Add workspace to Python path for imports
     // Escape the path to prevent code injection vulnerabilities
-    const escapedWorkspacePath = VIRTUAL_WORKSPACE.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const escapedWorkspacePath = VIRTUAL_WORKSPACE.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     this.pyodide.runPython(`
 import sys
 if '${escapedWorkspacePath}' not in sys.path:
@@ -201,7 +207,7 @@ if '${escapedWorkspacePath}' not in sys.path:
         } catch (error) {
           // Only ignore if directory already exists, log other errors
           const errorMsg = error instanceof Error ? error.message : String(error);
-          if (!errorMsg.includes('exists') && !errorMsg.includes('EEXIST')) {
+          if (!errorMsg.includes("exists") && !errorMsg.includes("EEXIST")) {
             console.error(`[Pyodide] Error creating directory ${virtualItemPath}:`, error);
           }
         }
@@ -225,9 +231,7 @@ if '${escapedWorkspacePath}' not in sys.path:
 
     let items: string[];
     try {
-      items = this.pyodide.FS.readdir(virtualPath).filter(
-        (x: string) => x !== "." && x !== ".."
-      );
+      items = this.pyodide.FS.readdir(virtualPath).filter((x: string) => x !== "." && x !== "..");
     } catch {
       return;
     }
@@ -250,7 +254,7 @@ if '${escapedWorkspacePath}' not in sys.path:
 
   /**
    * Execute Python code in the sandbox
-   * 
+   *
    * Network access is NOT available - Pyodide runs in WebAssembly which
    * doesn't have network capabilities. This is by design for security.
    */
@@ -294,7 +298,7 @@ if '${escapedWorkspacePath}' not in sys.path:
 
     try {
       // Set working directory to workspace
-      const escapedWorkspacePath = VIRTUAL_WORKSPACE.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const escapedWorkspacePath = VIRTUAL_WORKSPACE.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
       py.runPython(`import os; os.chdir('${escapedWorkspacePath}')`);
 
       // Auto-detect and load packages from imports in the code
@@ -378,7 +382,9 @@ if '${escapedWorkspacePath}' not in sys.path:
   /**
    * Read a file from the virtual filesystem
    */
-  async readFile(filePath: string): Promise<{ success: boolean; content: string | null; error: string | null }> {
+  async readFile(
+    filePath: string
+  ): Promise<{ success: boolean; content: string | null; error: string | null }> {
     try {
       const py = await this.initialize();
       this.syncHostToVirtual();
@@ -395,7 +401,10 @@ if '${escapedWorkspacePath}' not in sys.path:
   /**
    * Write a file to the virtual filesystem
    */
-  async writeFile(filePath: string, content: string): Promise<{ success: boolean; error: string | null }> {
+  async writeFile(
+    filePath: string,
+    content: string
+  ): Promise<{ success: boolean; error: string | null }> {
     try {
       const py = await this.initialize();
       this.syncHostToVirtual();
@@ -403,11 +412,11 @@ if '${escapedWorkspacePath}' not in sys.path:
       const fullPath = this.validatePath(filePath);
 
       // Validate file size
-      const fileSize = Buffer.byteLength(content, 'utf8');
+      const fileSize = Buffer.byteLength(content, "utf8");
       if (fileSize > MAX_FILE_SIZE) {
         throw new Error(
           `File too large: ${(fileSize / 1024 / 1024).toFixed(2)}MB. ` +
-          `Maximum allowed: ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(2)}MB`
+            `Maximum allowed: ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(2)}MB`
         );
       }
 
@@ -431,9 +440,7 @@ if '${escapedWorkspacePath}' not in sys.path:
   /**
    * List files in a directory
    */
-  async listFiles(
-    dirPath = ""
-  ): Promise<{
+  async listFiles(dirPath = ""): Promise<{
     success: boolean;
     files: Array<{ name: string; isDirectory: boolean; size: number }>;
     error: string | null;
@@ -840,4 +847,3 @@ main().catch((error) => {
   console.error("[MCP] Fatal error:", error);
   process.exit(1);
 });
-
