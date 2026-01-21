@@ -12,7 +12,12 @@
 import { loadPyodide, PyodideInterface } from "pyodide";
 import * as fs from "fs";
 import * as path from "path";
-import { WORKSPACE_DIR, VIRTUAL_WORKSPACE, MAX_FILE_SIZE, MAX_WORKSPACE_SIZE } from "../config/constants.js";
+import {
+  WORKSPACE_DIR,
+  VIRTUAL_WORKSPACE,
+  MAX_FILE_SIZE,
+  MAX_WORKSPACE_SIZE,
+} from "../config/constants.js";
 import type {
   ExecutionResult,
   FileReadResult,
