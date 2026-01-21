@@ -31,7 +31,9 @@ Returns execution results including output and any errors.`,
         packages: z
           .array(z.string())
           .optional()
-          .describe("Optional additional packages to install (most are auto-detected from imports)"),
+          .describe(
+            "Optional additional packages to install (most are auto-detected from imports)"
+          ),
       },
     },
     async ({ code, packages }) => {
