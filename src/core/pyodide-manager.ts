@@ -65,27 +65,29 @@ export class PyodideManager {
    * Calculate total workspace size from host filesystem
    * @returns Total size in bytes
    */
-  private getWorkspaceSize(): number {
-    if (!fs.existsSync(WORKSPACE_DIR)) {
+  private async getWorkspaceSize(): Promise<number> {
+    try {
+      await fs.promises.access(WORKSPACE_DIR);
+    } catch {
       return 0;
     }
 
     let totalSize = 0;
 
-    const calculateSize = (dirPath: string): void => {
-      const items = fs.readdirSync(dirPath);
+    const calculateSize = async (dirPath: string): Promise<void> => {
+      const items = await fs.promises.readdir(dirPath);
       for (const item of items) {
         const itemPath = path.join(dirPath, item);
-        const stat = fs.statSync(itemPath);
+        const stat = await fs.promises.stat(itemPath);
         if (stat.isDirectory()) {
-          calculateSize(itemPath);
+          await calculateSize(itemPath);
         } else {
           totalSize += stat.size;
         }
       }
     };
 
-    calculateSize(WORKSPACE_DIR);
+    await calculateSize(WORKSPACE_DIR);
     return totalSize;
   }
 
@@ -95,7 +97,7 @@ export class PyodideManager {
    * @throws Error if workspace size limit would be exceeded
    */
   private async checkWorkspaceSize(fileSize: number): Promise<void> {
-    const currentSize = this.getWorkspaceSize();
+    const currentSize = await this.getWorkspaceSize();
     if (currentSize + fileSize > MAX_WORKSPACE_SIZE) {
       throw new Error(
         `Workspace size limit exceeded. Current: ${(currentSize / 1024 / 1024).toFixed(2)}MB, ` +
@@ -168,7 +170,7 @@ if '${escapedWorkspacePath}' not in sys.path:
 `);
 
     // Sync host workspace to virtual FS
-    this.syncHostToVirtual();
+    await this.syncHostToVirtual();
 
     this.initialized = true;
     console.error("[Pyodide] Runtime initialized successfully");
@@ -179,15 +181,25 @@ if '${escapedWorkspacePath}' not in sys.path:
   /**
    * Sync files from host filesystem to Pyodide virtual FS
    */
-  syncHostToVirtual(hostPath = WORKSPACE_DIR, virtualPath = VIRTUAL_WORKSPACE): void {
-    if (!this.pyodide || !fs.existsSync(hostPath)) return;
+  async syncHostToVirtual(
+    hostPath = WORKSPACE_DIR,
+    virtualPath = VIRTUAL_WORKSPACE
+  ): Promise<void> {
+    if (!this.pyodide) return;
 
-    const items = fs.readdirSync(hostPath);
+    // Check if path exists asynchronously
+    try {
+      await fs.promises.access(hostPath);
+    } catch {
+      return;
+    }
+
+    const items = await fs.promises.readdir(hostPath);
 
     for (const item of items) {
       const hostItemPath = path.join(hostPath, item);
       const virtualItemPath = `${virtualPath}/${item}`;
-      const stat = fs.statSync(hostItemPath);
+      const stat = await fs.promises.stat(hostItemPath);
 
       if (stat.isDirectory()) {
         try {
@@ -199,9 +211,9 @@ if '${escapedWorkspacePath}' not in sys.path:
             console.error(`[Pyodide] Error creating directory ${virtualItemPath}:`, error);
           }
         }
-        this.syncHostToVirtual(hostItemPath, virtualItemPath);
+        await this.syncHostToVirtual(hostItemPath, virtualItemPath);
       } else {
-        const content = fs.readFileSync(hostItemPath);
+        const content = await fs.promises.readFile(hostItemPath);
         this.pyodide.FS.writeFile(virtualItemPath, content);
       }
     }
@@ -210,11 +222,17 @@ if '${escapedWorkspacePath}' not in sys.path:
   /**
    * Sync files from Pyodide virtual FS to host filesystem
    */
-  syncVirtualToHost(virtualPath = VIRTUAL_WORKSPACE, hostPath = WORKSPACE_DIR): void {
+  async syncVirtualToHost(
+    virtualPath = VIRTUAL_WORKSPACE,
+    hostPath = WORKSPACE_DIR
+  ): Promise<void> {
     if (!this.pyodide) return;
 
-    if (!fs.existsSync(hostPath)) {
-      fs.mkdirSync(hostPath, { recursive: true });
+    // Ensure host path exists
+    try {
+      await fs.promises.access(hostPath);
+    } catch {
+      await fs.promises.mkdir(hostPath, { recursive: true });
     }
 
     let items: string[];
@@ -232,10 +250,10 @@ if '${escapedWorkspacePath}' not in sys.path:
       const isDir = this.pyodide.FS.isDir(stat.mode);
 
       if (isDir) {
-        this.syncVirtualToHost(virtualItemPath, hostItemPath);
+        await this.syncVirtualToHost(virtualItemPath, hostItemPath);
       } else {
         const content = this.pyodide.FS.readFile(virtualItemPath);
-        fs.writeFileSync(hostItemPath, content);
+        await fs.promises.writeFile(hostItemPath, content);
       }
     }
   }
@@ -250,7 +268,7 @@ if '${escapedWorkspacePath}' not in sys.path:
     const py = await this.initialize();
 
     // Sync before execution
-    this.syncHostToVirtual();
+    await this.syncHostToVirtual();
 
     // Install requested packages
     if (packages.length > 0) {
@@ -287,7 +305,7 @@ if '${escapedWorkspacePath}' not in sys.path:
       const result = await py.runPythonAsync(code);
 
       // Sync back to host after execution
-      this.syncVirtualToHost();
+      await this.syncVirtualToHost();
 
       // Convert result to string representation if it exists
       let resultStr: string | null = null;
@@ -308,7 +326,7 @@ if '${escapedWorkspacePath}' not in sys.path:
       };
     } catch (e) {
       // Sync even on error (code may have written files before failing)
-      this.syncVirtualToHost();
+      await this.syncVirtualToHost();
 
       let errorMessage: string;
       if (e instanceof Error) {
@@ -362,7 +380,7 @@ if '${escapedWorkspacePath}' not in sys.path:
   async readFile(filePath: string): Promise<FileReadResult> {
     try {
       const py = await this.initialize();
-      this.syncHostToVirtual();
+      await this.syncHostToVirtual();
 
       const fullPath = this.validatePath(filePath);
 
@@ -379,7 +397,7 @@ if '${escapedWorkspacePath}' not in sys.path:
   async writeFile(filePath: string, content: string): Promise<FileWriteResult> {
     try {
       const py = await this.initialize();
-      this.syncHostToVirtual();
+      await this.syncHostToVirtual();
 
       const fullPath = this.validatePath(filePath);
 
@@ -402,7 +420,7 @@ if '${escapedWorkspacePath}' not in sys.path:
       }
 
       py.FS.writeFile(fullPath, content, { encoding: "utf8" });
-      this.syncVirtualToHost();
+      await this.syncVirtualToHost();
       return { success: true, error: null };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -415,7 +433,7 @@ if '${escapedWorkspacePath}' not in sys.path:
   async listFiles(dirPath = ""): Promise<FileListResult> {
     try {
       const py = await this.initialize();
-      this.syncHostToVirtual();
+      await this.syncHostToVirtual();
 
       const fullPath = dirPath ? this.validatePath(dirPath) : VIRTUAL_WORKSPACE;
 
@@ -443,7 +461,7 @@ if '${escapedWorkspacePath}' not in sys.path:
   async deleteFile(filePath: string): Promise<FileDeleteResult> {
     try {
       const py = await this.initialize();
-      this.syncHostToVirtual();
+      await this.syncHostToVirtual();
 
       const fullPath = this.validatePath(filePath);
       const relativePath = fullPath.replace(VIRTUAL_WORKSPACE + "/", "");
@@ -464,13 +482,16 @@ if '${escapedWorkspacePath}' not in sys.path:
       }
 
       // Also delete from host filesystem
-      if (fs.existsSync(hostPath)) {
-        const hostStat = fs.statSync(hostPath);
+      try {
+        await fs.promises.access(hostPath);
+        const hostStat = await fs.promises.stat(hostPath);
         if (hostStat.isDirectory()) {
-          fs.rmdirSync(hostPath);
+          await fs.promises.rmdir(hostPath);
         } else {
-          fs.unlinkSync(hostPath);
+          await fs.promises.unlink(hostPath);
         }
+      } catch {
+        // File doesn't exist on host, which is fine
       }
 
       return { success: true, error: null };
