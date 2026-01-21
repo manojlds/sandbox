@@ -38,24 +38,21 @@ This document tracks code review suggestions and their implementation status.
 
 ---
 
-### 3. ⏳ Path Injection Vulnerability (server.ts:96-97)
-**Status:** Pending
+### 3. ✅ Path Injection Vulnerability (server.ts:96-97)
+**Status:** FIXED
 
 **Issue:** String interpolation in Python code could allow code injection if `VIRTUAL_WORKSPACE` is user-controlled.
 
-**Location:** `server.ts:96-97`
+**Location:** `server.ts:94-98` and `server.ts:221`
+
+**Fix Applied:** Added proper path escaping to prevent code injection:
 ```typescript
+const escapedWorkspacePath = VIRTUAL_WORKSPACE.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 this.pyodide.runPython(`
 import sys
-if '${VIRTUAL_WORKSPACE}' not in sys.path:
-    sys.path.insert(0, '${VIRTUAL_WORKSPACE}')
+if '${escapedWorkspacePath}' not in sys.path:
+    sys.path.insert(0, '${escapedWorkspacePath}')
 `);
-```
-
-**Suggestion:** Use Python's API or validate/escape the path:
-```typescript
-const escapedPath = VIRTUAL_WORKSPACE.replace(/'/g, "\\'");
-// Or better, use pyodide's API if available
 ```
 
 ---
@@ -139,20 +136,30 @@ interface OperationResult<T = unknown> {
 
 ---
 
-### 8. ⏳ Missing Input Validation (server.ts:317-335)
-**Status:** Pending
+### 8. ✅ Missing Input Validation (server.ts:317-335)
+**Status:** FIXED
 
 **Issue:** No validation that file paths don't escape the workspace.
 
-**Suggestion:** Add path traversal protection:
+**Fix Applied:** Added comprehensive path traversal protection:
 ```typescript
-private validatePath(filePath: string): void {
-  const normalized = path.normalize(filePath);
-  if (normalized.includes('..') || path.isAbsolute(normalized)) {
-    throw new Error('Invalid path: path traversal detected');
+private validatePath(filePath: string): string {
+  const fullPath = filePath.startsWith("/") ? filePath : `${VIRTUAL_WORKSPACE}/${filePath}`;
+  const normalized = path.posix.normalize(fullPath);
+
+  if (!normalized.startsWith(VIRTUAL_WORKSPACE + "/") && normalized !== VIRTUAL_WORKSPACE) {
+    throw new Error(`Invalid path: Path traversal detected. Path must be within ${VIRTUAL_WORKSPACE}`);
   }
+
+  if (normalized.includes("..")) {
+    throw new Error("Invalid path: Path contains '..' after normalization");
+  }
+
+  return normalized;
 }
 ```
+
+All file operations (readFile, writeFile, listFiles, deleteFile) now use this validation.
 
 ---
 
@@ -229,43 +236,51 @@ for (const item of items) {
 
 ## 🔒 Security Enhancements
 
-### 13. ⏳ File Size Limits
-**Status:** Pending
+### 13. ✅ File Size Limits
+**Status:** FIXED
 
 **Issue:** No limits on file size could cause OOM errors.
 
-**Suggestion:** Add size validation:
+**Fix Applied:** Added comprehensive size limits:
 ```typescript
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+// Security limits
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
+const MAX_WORKSPACE_SIZE = 100 * 1024 * 1024; // 100MB total workspace
 
 async writeFile(filePath: string, content: string): Promise<...> {
-  if (Buffer.byteLength(content) > MAX_FILE_SIZE) {
-    return { success: false, error: 'File too large' };
+  const fileSize = Buffer.byteLength(content, 'utf8');
+  if (fileSize > MAX_FILE_SIZE) {
+    throw new Error(`File too large: ${(fileSize / 1024 / 1024).toFixed(2)}MB. Maximum allowed: ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(2)}MB`);
   }
+  await this.checkWorkspaceSize(fileSize);
   // ...
 }
 ```
 
+Also added workspace size tracking to prevent total workspace from exceeding limits.
+
 ---
 
-### 14. ⏳ Workspace Size Limit
-**Status:** Pending
+### 14. ✅ Workspace Size Limit
+**Status:** FIXED (implemented with #13)
 
 **Issue:** No limit on total workspace size.
 
-**Suggestion:** Track and limit workspace size:
+**Fix Applied:** Added workspace size tracking and validation:
 ```typescript
-async getWorkspaceSize(): Promise<number> {
-  // Calculate total size
+private getWorkspaceSize(): number {
+  // Recursively calculates total workspace size from host filesystem
 }
 
-private async checkWorkspaceSize(): Promise<void> {
-  const MAX_WORKSPACE_SIZE = 100 * 1024 * 1024; // 100MB
-  if (await this.getWorkspaceSize() > MAX_WORKSPACE_SIZE) {
-    throw new Error('Workspace size limit exceeded');
+private async checkWorkspaceSize(fileSize: number): Promise<void> {
+  const currentSize = this.getWorkspaceSize();
+  if (currentSize + fileSize > MAX_WORKSPACE_SIZE) {
+    throw new Error(`Workspace size limit exceeded. Current: ${(currentSize / 1024 / 1024).toFixed(2)}MB, Limit: ${(MAX_WORKSPACE_SIZE / 1024 / 1024).toFixed(2)}MB`);
   }
 }
 ```
+
+This is automatically checked before writing any file.
 
 ---
 
@@ -512,21 +527,22 @@ const env = envSchema.parse(process.env);
 ## Summary
 
 **Priority Recommendations:**
-1. ✅ Fix server process leak in tests (#2)
-2. ✅ Add path traversal validation (#8)
-3. ✅ Replace hard-coded sleeps with polling (#4)
-4. ✅ Fix silent error handling (#1)
-5. ⏳ Add file size limits (#13)
-6. ⏳ Make tests independent (#5)
-7. ⏳ Add proper TypeScript interfaces (#6)
-8. ⏳ Implement incremental sync (#10)
+1. ✅ Fix silent error handling (#1)
+2. ✅ Fix server process leak in tests (#2)
+3. ✅ Fix path injection vulnerability (#3)
+4. ✅ Add path traversal validation (#8)
+5. ✅ Add file size limits (#13, #14)
+6. ⏳ Replace hard-coded sleeps with polling (#4)
+7. ⏳ Make tests independent (#5)
+8. ⏳ Add proper TypeScript interfaces (#6)
+9. ⏳ Implement incremental sync (#10)
 
 ---
 
 ## Progress Tracking
 
 - **Total Issues:** 28
-- **Fixed:** 2
+- **Fixed:** 6 (#1, #2, #3, #8, #13, #14)
 - **In Progress:** 0
-- **Pending:** 26
-- **Completion:** 7%
+- **Pending:** 22
+- **Completion:** 21%

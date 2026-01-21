@@ -80,10 +80,7 @@ class McpTestRunner {
       cwd: path.join(__dirname, ".."),
     });
 
-    this.client = new Client(
-      { name: "test-client", version: "1.0.0" },
-      { capabilities: {} }
-    );
+    this.client = new Client({ name: "test-client", version: "1.0.0" }, { capabilities: {} });
 
     await this.client.connect(this.transport);
     log("✓ MCP client connected\n", colors.green);
@@ -133,10 +130,7 @@ class McpTestRunner {
   /**
    * Run a single test
    */
-  private async runTest(
-    name: string,
-    testFn: () => Promise<void>
-  ): Promise<TestResult> {
+  private async runTest(name: string, testFn: () => Promise<void>): Promise<TestResult> {
     const start = Date.now();
     try {
       await testFn();
@@ -160,13 +154,13 @@ class McpTestRunner {
     // Test 1: Basic Python Execution
     this.results.push(
       await this.runTest("Basic Python execution", async () => {
-        const result = await this.callTool("execute_python", {
+        const result = (await this.callTool("execute_python", {
           code: `
 import sys
 print(f"Python version: {sys.version_info.major}.{sys.version_info.minor}")
 print("Hello from Pyodide!")
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("Python version: 3.12"), "Should show Python version");
@@ -177,13 +171,13 @@ print("Hello from Pyodide!")
     // Test 2: Math operations
     this.results.push(
       await this.runTest("Math operations", async () => {
-        const result = await this.callTool("execute_python", {
+        const result = (await this.callTool("execute_python", {
           code: `
 import math
 print(f"Pi: {math.pi}")
 print(f"factorial(5): {math.factorial(5)}")
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("Pi: 3.14159"), "Should calculate pi");
@@ -194,7 +188,7 @@ print(f"factorial(5): {math.factorial(5)}")
     // Test 3: Write file
     this.results.push(
       await this.runTest("Write file", async () => {
-        const result = await this.callTool("write_file", {
+        const result = (await this.callTool("write_file", {
           path: "test_module.py",
           content: `
 def add(a, b):
@@ -205,7 +199,7 @@ def multiply(a, b):
 
 MESSAGE = "Hello from test module!"
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("✓"), "Should succeed writing file");
@@ -215,9 +209,9 @@ MESSAGE = "Hello from test module!"
     // Test 4: Read file
     this.results.push(
       await this.runTest("Read file", async () => {
-        const result = await this.callTool("read_file", {
+        const result = (await this.callTool("read_file", {
           path: "test_module.py",
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("def add(a, b)"), "Should contain add function");
@@ -228,9 +222,9 @@ MESSAGE = "Hello from test module!"
     // Test 5: List files
     this.results.push(
       await this.runTest("List files", async () => {
-        const result = await this.callTool("list_files", {
+        const result = (await this.callTool("list_files", {
           path: "",
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("test_module.py"), "Should list test_module.py");
@@ -240,14 +234,14 @@ MESSAGE = "Hello from test module!"
     // Test 6: Import custom module (tests sys.path fix)
     this.results.push(
       await this.runTest("Import custom module", async () => {
-        const result = await this.callTool("execute_python", {
+        const result = (await this.callTool("execute_python", {
           code: `
 import test_module
 print(test_module.MESSAGE)
 print(f"add(2, 3) = {test_module.add(2, 3)}")
 print(f"multiply(4, 5) = {test_module.multiply(4, 5)}")
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("Hello from test module!"), "Should import MESSAGE");
@@ -264,9 +258,9 @@ print(f"multiply(4, 5) = {test_module.multiply(4, 5)}")
           content: JSON.stringify({ debug: true, version: "1.0.0" }, null, 2),
         });
 
-        const listResult = await this.callTool("list_files", {
+        const listResult = (await this.callTool("list_files", {
           path: "data",
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = listResult.content[0].text;
         assert(output.includes("config"), "Should have config directory");
@@ -276,7 +270,7 @@ print(f"multiply(4, 5) = {test_module.multiply(4, 5)}")
     // Test 8: File I/O from Python
     this.results.push(
       await this.runTest("File I/O from Python", async () => {
-        const result = await this.callTool("execute_python", {
+        const result = (await this.callTool("execute_python", {
           code: `
 import json
 
@@ -294,7 +288,7 @@ with open('output.txt', 'w') as f:
 
 print("File written successfully!")
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("Debug: True"), "Should read debug setting");
@@ -306,9 +300,9 @@ print("File written successfully!")
     // Test 9: Verify Python-written file via MCP
     this.results.push(
       await this.runTest("Verify Python-written file", async () => {
-        const result = await this.callTool("read_file", {
+        const result = (await this.callTool("read_file", {
           path: "output.txt",
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("Generated from Python!"), "Should contain generated content");
@@ -320,15 +314,15 @@ print("File written successfully!")
     this.results.push(
       await this.runTest("Install and use NumPy", async () => {
         // Install numpy
-        const installResult = await this.callTool("install_packages", {
+        const installResult = (await this.callTool("install_packages", {
           packages: ["numpy"],
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const installOutput = installResult.content[0].text;
         assert(installOutput.includes("numpy: ✓ installed"), "Should install numpy");
 
         // Use numpy
-        const execResult = await this.callTool("execute_python", {
+        const execResult = (await this.callTool("execute_python", {
           code: `
 import numpy as np
 arr = np.array([1, 2, 3, 4, 5])
@@ -337,7 +331,7 @@ print(f"Mean: {np.mean(arr)}")
 print(f"Sum: {np.sum(arr)}")
 print(f"Std: {np.std(arr):.2f}")
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = execResult.content[0].text;
         assert(output.includes("Mean: 3.0"), "Should calculate mean");
@@ -348,14 +342,14 @@ print(f"Std: {np.std(arr):.2f}")
     // Test 11: Install and use pandas
     this.results.push(
       await this.runTest("Install and use Pandas", async () => {
-        const installResult = await this.callTool("install_packages", {
+        const installResult = (await this.callTool("install_packages", {
           packages: ["pandas"],
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const installOutput = installResult.content[0].text;
         assert(installOutput.includes("pandas"), "Should show pandas in output");
 
-        const execResult = await this.callTool("execute_python", {
+        const execResult = (await this.callTool("execute_python", {
           code: `
 import pandas as pd
 data = {'name': ['Alice', 'Bob'], 'score': [85, 92]}
@@ -363,7 +357,7 @@ df = pd.DataFrame(data)
 print(f"Names: {list(df['name'])}")
 print(f"Mean: {df['score'].mean()}")
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = execResult.content[0].text;
         assert(output.includes("Alice"), "Should have Alice in output");
@@ -374,11 +368,11 @@ print(f"Mean: {df['score'].mean()}")
     // Test 12: Error handling
     this.results.push(
       await this.runTest("Error handling", async () => {
-        const result = await this.callTool("execute_python", {
+        const result = (await this.callTool("execute_python", {
           code: `
 x = 1 / 0  # This will raise ZeroDivisionError
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         assert(output.includes("ZeroDivisionError"), "Should catch division error");
@@ -395,24 +389,27 @@ x = 1 / 0  # This will raise ZeroDivisionError
         });
 
         // Verify file exists
-        const beforeList = await this.callTool("list_files", {
+        const beforeList = (await this.callTool("list_files", {
           path: "",
-        }) as { content: Array<{ text: string }> };
-        assert(beforeList.content[0].text.includes("to_delete.txt"), "File should exist before delete");
+        })) as { content: Array<{ text: string }> };
+        assert(
+          beforeList.content[0].text.includes("to_delete.txt"),
+          "File should exist before delete"
+        );
 
         // Delete file
-        const deleteResult = await this.callTool("delete_file", {
+        const deleteResult = (await this.callTool("delete_file", {
           path: "to_delete.txt",
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
         assert(deleteResult.content[0].text.includes("✓"), "Should delete successfully");
 
         // Small delay to ensure sync completes
         await this.sleep(100);
 
         // Verify file is gone
-        const afterList = await this.callTool("list_files", {
+        const afterList = (await this.callTool("list_files", {
           path: "",
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
         assert(!afterList.content[0].text.includes("to_delete.txt"), "File should be deleted");
       })
     );
@@ -421,14 +418,15 @@ x = 1 / 0  # This will raise ZeroDivisionError
     this.results.push(
       await this.runTest("Read sandbox info resource", async () => {
         const resources = await this.client!.listResources();
-        const infoResource = resources.resources.find(
-          (r) => r.uri === "sandbox://info"
-        );
+        const infoResource = resources.resources.find((r) => r.uri === "sandbox://info");
         assert(infoResource, "Should have sandbox://info resource");
 
         const content = await this.client!.readResource({ uri: "sandbox://info" });
         const text = content.contents[0];
-        assert("text" in text && text.text.includes("Pyodide Sandbox"), "Should contain sandbox info");
+        assert(
+          "text" in text && text.text.includes("Pyodide Sandbox"),
+          "Should contain sandbox info"
+        );
       })
     );
 
@@ -437,14 +435,17 @@ x = 1 / 0  # This will raise ZeroDivisionError
       await this.runTest("Read workspace files resource", async () => {
         const content = await this.client!.readResource({ uri: "workspace://files" });
         const text = content.contents[0];
-        assert("text" in text && text.text.includes("test_module.py"), "Should list test_module.py");
+        assert(
+          "text" in text && text.text.includes("test_module.py"),
+          "Should list test_module.py"
+        );
       })
     );
 
     // Test 16: Network is always blocked (WASM security boundary)
     this.results.push(
       await this.runTest("Network requests always fail", async () => {
-        const result = await this.callTool("execute_python", {
+        const result = (await this.callTool("execute_python", {
           code: `
 import urllib.request
 
@@ -456,7 +457,7 @@ except Exception as e:
     # Expected: network access fails in WASM sandbox
     print(f"EXPECTED: Network blocked - {type(e).__name__}: {str(e)[:100]}")
 `,
-        }) as { content: Array<{ text: string }> };
+        })) as { content: Array<{ text: string }> };
 
         const output = result.content[0].text;
         // The request should fail with some error (URLError, OSError, etc.)
@@ -465,10 +466,7 @@ except Exception as e:
           output.includes("EXPECTED: Network blocked") || output.includes("Error"),
           "Network requests should fail in WASM sandbox"
         );
-        assert(
-          !output.includes("UNEXPECTED"),
-          "Network request should not succeed"
-        );
+        assert(!output.includes("UNEXPECTED"), "Network request should not succeed");
       })
     );
 
@@ -488,16 +486,19 @@ except Exception as e:
           }),
         ];
 
-        const results = await Promise.all(promises) as Array<{ content: Array<{ text: string }> }>;
-        
+        const results = (await Promise.all(promises)) as Array<{
+          content: Array<{ text: string }>;
+        }>;
+
         // All three should succeed - no "No module named 'micropip'" errors
         for (let i = 0; i < results.length; i++) {
           const output = results[i].content[0].text;
           // Check that it contains the expected output OR executed successfully
           const hasExpectedOutput = output.includes(`Call ${i + 1}: micropip available`);
-          const executedSuccessfully = output.includes("micropip available") || output.includes("successfully");
+          const executedSuccessfully =
+            output.includes("micropip available") || output.includes("successfully");
           const hasMicropipError = output.includes("No module named 'micropip'");
-          
+
           assert(
             !hasMicropipError,
             `Concurrent call ${i + 1} failed with micropip error: ${output}`
@@ -567,5 +568,4 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main();
-
+void main();

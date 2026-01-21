@@ -73,7 +73,7 @@ jobs:
         run: npm install -g opencode-ai
 
       - name: Install DRS
-        run: npm install -g drs-ai
+        run: npm install -g @diff-review-system/drs
 
       - name: Setup OpenCode Zen Authentication
         if: env.OPENCODE_ZEN_API_KEY != ''
@@ -143,7 +143,7 @@ jobs:
         run: npm install -g opencode-ai
 
       - name: Install DRS
-        run: npm install -g drs-ai
+        run: npm install -g @diff-review-system/drs
 
       - name: Setup OpenCode Zen Authentication
         if: env.OPENCODE_ZEN_API_KEY != ''
