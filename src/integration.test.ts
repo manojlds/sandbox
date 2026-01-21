@@ -9,7 +9,6 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
@@ -53,7 +52,7 @@ interface TestResult {
 
 class McpTestRunner {
   private client: Client | null = null;
-  private serverProcess: ChildProcess | null = null;
+  private transport: StdioClientTransport | null = null;
   private results: TestResult[] = [];
 
   /**
@@ -71,7 +70,7 @@ class McpTestRunner {
     // Spawn the server process
     const serverPath = path.join(__dirname, "server.ts");
 
-    const transport = new StdioClientTransport({
+    this.transport = new StdioClientTransport({
       command: "npx",
       args: ["tsx", serverPath],
       env: {
@@ -86,7 +85,7 @@ class McpTestRunner {
       { capabilities: {} }
     );
 
-    await this.client.connect(transport);
+    await this.client.connect(this.transport);
     log("✓ MCP client connected\n", colors.green);
 
     // Wait a bit for Pyodide to initialize
@@ -105,8 +104,8 @@ class McpTestRunner {
       await this.client.close();
     }
 
-    if (this.serverProcess) {
-      this.serverProcess.kill();
+    if (this.transport) {
+      await this.transport.close();
     }
 
     // Clean up test workspace

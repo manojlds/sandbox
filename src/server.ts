@@ -122,8 +122,12 @@ if '${VIRTUAL_WORKSPACE}' not in sys.path:
       if (stat.isDirectory()) {
         try {
           this.pyodide.FS.mkdirTree(virtualItemPath);
-        } catch {
-          // Directory might already exist
+        } catch (error) {
+          // Only ignore if directory already exists, log other errors
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          if (!errorMsg.includes('exists') && !errorMsg.includes('EEXIST')) {
+            console.error(`[Pyodide] Error creating directory ${virtualItemPath}:`, error);
+          }
         }
         this.syncHostToVirtual(hostItemPath, virtualItemPath);
       } else {
