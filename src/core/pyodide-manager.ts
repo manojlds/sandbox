@@ -275,13 +275,6 @@ if '${escapedWorkspacePath}' not in sys.path:
   private async syncVirtualPathToHost(virtualPath: string, hostPath: string): Promise<void> {
     if (!this.pyodide) return;
 
-    // Ensure host path exists
-    try {
-      await fs.promises.access(hostPath);
-    } catch {
-      await fs.promises.mkdir(hostPath, { recursive: true });
-    }
-
     let stat: { mode: number };
     try {
       stat = this.pyodide.FS.stat(virtualPath);
@@ -297,6 +290,8 @@ if '${escapedWorkspacePath}' not in sys.path:
       await fs.promises.writeFile(hostPath, content);
       return;
     }
+
+    await fs.promises.mkdir(hostPath, { recursive: true });
 
     let items: string[];
     try {

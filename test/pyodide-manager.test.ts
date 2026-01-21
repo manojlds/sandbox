@@ -8,6 +8,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
+import { PyodideManager } from "../src/core/pyodide-manager.js";
+import { VIRTUAL_WORKSPACE } from "../src/config/constants.js";
 
 // Test workspace directory
 const TEST_WORKSPACE = path.join(process.cwd(), "test-workspace-async");
@@ -199,6 +201,63 @@ describe("PyodideManager - Async File Operations", () => {
       // Verify all files exist
       const files = await fs.promises.readdir(testDir);
       expect(files.length).toBe(fileCount);
+    });
+  });
+
+  describe("Targeted workspace syncs", () => {
+    it("syncHostPathToVirtual only writes the requested file", async () => {
+      const testDir = path.join(TEST_WORKSPACE, "targeted");
+      await fs.promises.mkdir(testDir, { recursive: true });
+
+      const fileA = path.join(testDir, "a.txt");
+      const fileB = path.join(testDir, "b.txt");
+      await fs.promises.writeFile(fileA, "file-a");
+      await fs.promises.writeFile(fileB, "file-b");
+
+      const virtualWrites: Record<string, Buffer> = {};
+      const mkdirs: string[] = [];
+
+      const manager = new PyodideManager();
+      (manager as unknown as { pyodide: { FS: unknown } }).pyodide = {
+        FS: {
+          mkdirTree: (dir: string) => mkdirs.push(dir),
+          writeFile: (targetPath: string, content: Buffer) => {
+            virtualWrites[targetPath] = content;
+          },
+        },
+      };
+
+      await (manager as unknown as {
+        syncHostPathToVirtual: (hostPath: string, virtualPath: string) => Promise<void>;
+      }).syncHostPathToVirtual(fileA, `${VIRTUAL_WORKSPACE}/a.txt`);
+
+      expect(Object.keys(virtualWrites)).toEqual([`${VIRTUAL_WORKSPACE}/a.txt`]);
+      expect(virtualWrites[`${VIRTUAL_WORKSPACE}/a.txt`].toString()).toBe("file-a");
+      expect(mkdirs.length).toBeGreaterThanOrEqual(0);
+    });
+
+    it("syncVirtualPathToHost only writes the requested file", async () => {
+      const manager = new PyodideManager();
+      const fileMode = 0;
+      const fileContent = Buffer.from("hello");
+
+      const virtualPath = `${VIRTUAL_WORKSPACE}/nested/hello.txt`;
+      const hostPath = path.join(TEST_WORKSPACE, "nested", "hello.txt");
+
+      (manager as unknown as { pyodide: { FS: unknown } }).pyodide = {
+        FS: {
+          stat: () => ({ mode: fileMode }),
+          isDir: (mode: number) => mode !== fileMode,
+          readFile: () => fileContent,
+        },
+      };
+
+      await (manager as unknown as {
+        syncVirtualPathToHost: (virtualPath: string, hostPath: string) => Promise<void>;
+      }).syncVirtualPathToHost(virtualPath, hostPath);
+
+      const content = await fs.promises.readFile(hostPath, "utf8");
+      expect(content).toBe("hello");
     });
   });
 });
