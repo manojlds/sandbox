@@ -33,6 +33,21 @@ export class PyodideManager {
   private initializationPromise: Promise<PyodideInterface> | null = null;
 
   /**
+   * Convert a virtual path to a host filesystem path.
+   */
+  private virtualToHostPath(virtualPath: string): string {
+    if (virtualPath === VIRTUAL_WORKSPACE) {
+      return WORKSPACE_DIR;
+    }
+
+    if (virtualPath.startsWith(`${VIRTUAL_WORKSPACE}/`)) {
+      return path.join(WORKSPACE_DIR, virtualPath.slice(VIRTUAL_WORKSPACE.length + 1));
+    }
+
+    return path.join(WORKSPACE_DIR, virtualPath);
+  }
+
+  /**
    * Validate and normalize a file path to prevent directory traversal attacks
    * @param filePath - The file path to validate
    * @returns The normalized virtual filesystem path
@@ -185,6 +200,13 @@ if '${escapedWorkspacePath}' not in sys.path:
     hostPath = WORKSPACE_DIR,
     virtualPath = VIRTUAL_WORKSPACE
   ): Promise<void> {
+    await this.syncHostPathToVirtual(hostPath, virtualPath);
+  }
+
+  /**
+   * Sync a specific host file or directory into the virtual FS.
+   */
+  private async syncHostPathToVirtual(hostPath: string, virtualPath: string): Promise<void> {
     if (!this.pyodide) return;
 
     // Check if path exists asynchronously
@@ -194,14 +216,32 @@ if '${escapedWorkspacePath}' not in sys.path:
       return;
     }
 
+    const stat = await fs.promises.stat(hostPath);
+    if (!stat.isDirectory()) {
+      const parentDir = path.posix.dirname(virtualPath);
+      if (parentDir && parentDir !== "/" && !parentDir.includes("..")) {
+        try {
+          this.pyodide.FS.mkdirTree(parentDir);
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          if (!errorMsg.includes("exists") && !errorMsg.includes("EEXIST")) {
+            console.error(`[Pyodide] Error creating directory ${parentDir}:`, error);
+          }
+        }
+      }
+      const content = await fs.promises.readFile(hostPath);
+      this.pyodide.FS.writeFile(virtualPath, content);
+      return;
+    }
+
     const items = await fs.promises.readdir(hostPath);
 
     for (const item of items) {
       const hostItemPath = path.join(hostPath, item);
       const virtualItemPath = `${virtualPath}/${item}`;
-      const stat = await fs.promises.stat(hostItemPath);
+      const itemStat = await fs.promises.stat(hostItemPath);
 
-      if (stat.isDirectory()) {
+      if (itemStat.isDirectory()) {
         try {
           this.pyodide.FS.mkdirTree(virtualItemPath);
         } catch (error) {
@@ -211,7 +251,7 @@ if '${escapedWorkspacePath}' not in sys.path:
             console.error(`[Pyodide] Error creating directory ${virtualItemPath}:`, error);
           }
         }
-        await this.syncHostToVirtual(hostItemPath, virtualItemPath);
+        await this.syncHostPathToVirtual(hostItemPath, virtualItemPath);
       } else {
         const content = await fs.promises.readFile(hostItemPath);
         this.pyodide.FS.writeFile(virtualItemPath, content);
@@ -226,14 +266,32 @@ if '${escapedWorkspacePath}' not in sys.path:
     virtualPath = VIRTUAL_WORKSPACE,
     hostPath = WORKSPACE_DIR
   ): Promise<void> {
+    await this.syncVirtualPathToHost(virtualPath, hostPath);
+  }
+
+  /**
+   * Sync a specific virtual file or directory into the host filesystem.
+   */
+  private async syncVirtualPathToHost(virtualPath: string, hostPath: string): Promise<void> {
     if (!this.pyodide) return;
 
-    // Ensure host path exists
+    let stat: { mode: number };
     try {
-      await fs.promises.access(hostPath);
+      stat = this.pyodide.FS.stat(virtualPath);
     } catch {
-      await fs.promises.mkdir(hostPath, { recursive: true });
+      return;
     }
+
+    const isDir = this.pyodide.FS.isDir(stat.mode);
+    if (!isDir) {
+      const parentDir = path.dirname(hostPath);
+      await fs.promises.mkdir(parentDir, { recursive: true });
+      const content = this.pyodide.FS.readFile(virtualPath);
+      await fs.promises.writeFile(hostPath, content);
+      return;
+    }
+
+    await fs.promises.mkdir(hostPath, { recursive: true });
 
     let items: string[];
     try {
@@ -246,11 +304,11 @@ if '${escapedWorkspacePath}' not in sys.path:
       const virtualItemPath = `${virtualPath}/${item}`;
       const hostItemPath = path.join(hostPath, item);
 
-      const stat = this.pyodide.FS.stat(virtualItemPath);
-      const isDir = this.pyodide.FS.isDir(stat.mode);
+      const itemStat = this.pyodide.FS.stat(virtualItemPath);
+      const itemIsDir = this.pyodide.FS.isDir(itemStat.mode);
 
-      if (isDir) {
-        await this.syncVirtualToHost(virtualItemPath, hostItemPath);
+      if (itemIsDir) {
+        await this.syncVirtualPathToHost(virtualItemPath, hostItemPath);
       } else {
         const content = this.pyodide.FS.readFile(virtualItemPath);
         await fs.promises.writeFile(hostItemPath, content);
@@ -380,9 +438,10 @@ if '${escapedWorkspacePath}' not in sys.path:
   async readFile(filePath: string): Promise<FileReadResult> {
     try {
       const py = await this.initialize();
-      await this.syncHostToVirtual();
 
       const fullPath = this.validatePath(filePath);
+      const hostPath = this.virtualToHostPath(fullPath);
+      await this.syncHostPathToVirtual(hostPath, fullPath);
 
       const content = py.FS.readFile(fullPath, { encoding: "utf8" });
       return { success: true, content, error: null };
@@ -397,9 +456,9 @@ if '${escapedWorkspacePath}' not in sys.path:
   async writeFile(filePath: string, content: string): Promise<FileWriteResult> {
     try {
       const py = await this.initialize();
-      await this.syncHostToVirtual();
 
       const fullPath = this.validatePath(filePath);
+      const hostPath = this.virtualToHostPath(fullPath);
 
       // Validate file size
       const fileSize = Buffer.byteLength(content, "utf8");
@@ -420,7 +479,7 @@ if '${escapedWorkspacePath}' not in sys.path:
       }
 
       py.FS.writeFile(fullPath, content, { encoding: "utf8" });
-      await this.syncVirtualToHost();
+      await this.syncVirtualPathToHost(fullPath, hostPath);
       return { success: true, error: null };
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -433,9 +492,9 @@ if '${escapedWorkspacePath}' not in sys.path:
   async listFiles(dirPath = ""): Promise<FileListResult> {
     try {
       const py = await this.initialize();
-      await this.syncHostToVirtual();
-
       const fullPath = dirPath ? this.validatePath(dirPath) : VIRTUAL_WORKSPACE;
+      const hostPath = this.virtualToHostPath(fullPath);
+      await this.syncHostPathToVirtual(hostPath, fullPath);
 
       const items = py.FS.readdir(fullPath).filter((x: string) => x !== "." && x !== "..");
 
@@ -461,11 +520,10 @@ if '${escapedWorkspacePath}' not in sys.path:
   async deleteFile(filePath: string): Promise<FileDeleteResult> {
     try {
       const py = await this.initialize();
-      await this.syncHostToVirtual();
 
       const fullPath = this.validatePath(filePath);
-      const relativePath = fullPath.replace(VIRTUAL_WORKSPACE + "/", "");
-      const hostPath = path.join(WORKSPACE_DIR, relativePath);
+      const hostPath = this.virtualToHostPath(fullPath);
+      await this.syncHostPathToVirtual(hostPath, fullPath);
 
       // Validate the host path is within workspace directory
       const normalizedHostPath = path.normalize(hostPath);
