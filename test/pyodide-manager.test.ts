@@ -227,9 +227,11 @@ describe("PyodideManager - Async File Operations", () => {
         },
       };
 
-      await (manager as unknown as {
-        syncHostPathToVirtual: (hostPath: string, virtualPath: string) => Promise<void>;
-      }).syncHostPathToVirtual(fileA, `${VIRTUAL_WORKSPACE}/a.txt`);
+      await (
+        manager as unknown as {
+          syncHostPathToVirtual: (hostPath: string, virtualPath: string) => Promise<void>;
+        }
+      ).syncHostPathToVirtual(fileA, `${VIRTUAL_WORKSPACE}/a.txt`);
 
       expect(Object.keys(virtualWrites)).toEqual([`${VIRTUAL_WORKSPACE}/a.txt`]);
       expect(virtualWrites[`${VIRTUAL_WORKSPACE}/a.txt`].toString()).toBe("file-a");
@@ -252,9 +254,11 @@ describe("PyodideManager - Async File Operations", () => {
         },
       };
 
-      await (manager as unknown as {
-        syncVirtualPathToHost: (virtualPath: string, hostPath: string) => Promise<void>;
-      }).syncVirtualPathToHost(virtualPath, hostPath);
+      await (
+        manager as unknown as {
+          syncVirtualPathToHost: (virtualPath: string, hostPath: string) => Promise<void>;
+        }
+      ).syncVirtualPathToHost(virtualPath, hostPath);
 
       const content = await fs.promises.readFile(hostPath, "utf8");
       expect(content).toBe("hello");
