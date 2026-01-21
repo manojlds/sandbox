@@ -181,7 +181,10 @@ if '${escapedWorkspacePath}' not in sys.path:
   /**
    * Sync files from host filesystem to Pyodide virtual FS
    */
-  async syncHostToVirtual(hostPath = WORKSPACE_DIR, virtualPath = VIRTUAL_WORKSPACE): Promise<void> {
+  async syncHostToVirtual(
+    hostPath = WORKSPACE_DIR,
+    virtualPath = VIRTUAL_WORKSPACE
+  ): Promise<void> {
     if (!this.pyodide) return;
 
     // Check if path exists asynchronously
@@ -219,7 +222,10 @@ if '${escapedWorkspacePath}' not in sys.path:
   /**
    * Sync files from Pyodide virtual FS to host filesystem
    */
-  async syncVirtualToHost(virtualPath = VIRTUAL_WORKSPACE, hostPath = WORKSPACE_DIR): Promise<void> {
+  async syncVirtualToHost(
+    virtualPath = VIRTUAL_WORKSPACE,
+    hostPath = WORKSPACE_DIR
+  ): Promise<void> {
     if (!this.pyodide) return;
 
     // Ensure host path exists
