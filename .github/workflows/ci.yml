@@ -42,7 +42,7 @@ jobs:
         run: npm run build
 
       - name: Run tests
-        run: npm run test:ci
+        run: npm test
 
       - name: Check package can be packed
         run: npm pack --dry-run

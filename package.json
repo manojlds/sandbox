@@ -19,7 +19,6 @@
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "test": "vitest run",
-    "test:ci": "CI=true vitest run",
     "test:watch": "vitest",
     "test:integration": "tsx src/integration.test.ts",
     "test:build": "tsc && node dist/integration.test.js",

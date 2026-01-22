@@ -12,6 +12,7 @@
 import { loadPyodide, PyodideInterface } from "pyodide";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import {
   WORKSPACE_DIR,
   VIRTUAL_WORKSPACE,
@@ -155,24 +156,18 @@ export class PyodideManager {
     this.pyodide.FS.mkdirTree(VIRTUAL_WORKSPACE);
 
     // Load micropip for package installation with proper error handling
+    // Note: micropip loading may fail in some environments (restricted network, etc.)
+    // We'll handle this gracefully and lazy-load when actually needed
     try {
       await this.pyodide.loadPackage("micropip");
       console.error("[Pyodide] micropip loaded successfully");
-    } catch (error) {
-      console.error("[Pyodide] Failed to load micropip:", error);
-      throw new Error(
-        `Failed to load micropip: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
 
-    // Verify micropip is actually available
-    try {
+      // Verify micropip is actually available
       this.pyodide.pyimport("micropip");
+      console.error("[Pyodide] micropip verified");
     } catch (error) {
-      console.error("[Pyodide] micropip verification failed:", error);
-      throw new Error(
-        "micropip was loaded but cannot be imported. This may indicate a Pyodide installation issue."
-      );
+      console.error("[Pyodide] Warning: micropip not available (will be loaded on-demand):", error);
+      // Don't throw - we'll lazy-load micropip when package installation is requested
     }
 
     // Add workspace to Python path for imports
