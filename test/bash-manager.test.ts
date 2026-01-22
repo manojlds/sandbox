@@ -65,16 +65,11 @@ describe("BashManager Integration Tests", () => {
 
   describe("File Operations", () => {
     it("should create files", async () => {
-      const result = await bashManager.execute(
-        "echo 'test content' > test.txt"
-      );
+      const result = await bashManager.execute("echo 'test content' > test.txt");
       expect(result.exitCode).toBe(0);
 
       // Verify file was created on host filesystem
-      const content = await fs.readFile(
-        path.join(testWorkspace, "test.txt"),
-        "utf-8"
-      );
+      const content = await fs.readFile(path.join(testWorkspace, "test.txt"), "utf-8");
       expect(content.trim()).toBe("test content");
     });
 
@@ -108,30 +103,20 @@ describe("BashManager Integration Tests", () => {
       const result = await bashManager.execute("cp original.txt copy.txt");
       expect(result.exitCode).toBe(0);
 
-      const content = await fs.readFile(
-        path.join(testWorkspace, "copy.txt"),
-        "utf-8"
-      );
+      const content = await fs.readFile(path.join(testWorkspace, "copy.txt"), "utf-8");
       expect(content.trim()).toBe("original");
     });
 
     it("should move files", async () => {
       await bashManager.execute("echo 'move me' > move_source.txt");
-      const result = await bashManager.execute(
-        "mv move_source.txt move_dest.txt"
-      );
+      const result = await bashManager.execute("mv move_source.txt move_dest.txt");
       expect(result.exitCode).toBe(0);
 
       // Source should not exist
-      await expect(
-        fs.access(path.join(testWorkspace, "move_source.txt"))
-      ).rejects.toThrow();
+      await expect(fs.access(path.join(testWorkspace, "move_source.txt"))).rejects.toThrow();
 
       // Destination should exist
-      const content = await fs.readFile(
-        path.join(testWorkspace, "move_dest.txt"),
-        "utf-8"
-      );
+      const content = await fs.readFile(path.join(testWorkspace, "move_dest.txt"), "utf-8");
       expect(content.trim()).toBe("move me");
     });
 
@@ -141,9 +126,7 @@ describe("BashManager Integration Tests", () => {
       expect(result.exitCode).toBe(0);
 
       // File should not exist
-      await expect(
-        fs.access(path.join(testWorkspace, "delete_test.txt"))
-      ).rejects.toThrow();
+      await expect(fs.access(path.join(testWorkspace, "delete_test.txt"))).rejects.toThrow();
     });
   });
 
@@ -156,15 +139,10 @@ describe("BashManager Integration Tests", () => {
     });
 
     it("should support output redirection", async () => {
-      const result = await bashManager.execute(
-        "echo 'redirected' > redirect.txt"
-      );
+      const result = await bashManager.execute("echo 'redirected' > redirect.txt");
       expect(result.exitCode).toBe(0);
 
-      const content = await fs.readFile(
-        path.join(testWorkspace, "redirect.txt"),
-        "utf-8"
-      );
+      const content = await fs.readFile(path.join(testWorkspace, "redirect.txt"), "utf-8");
       expect(content.trim()).toBe("redirected");
     });
 
@@ -177,9 +155,7 @@ describe("BashManager Integration Tests", () => {
     });
 
     it("should support command chaining with &&", async () => {
-      const result = await bashManager.execute(
-        "echo 'first' && echo 'second'"
-      );
+      const result = await bashManager.execute("echo 'first' && echo 'second'");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("first");
       expect(result.stdout).toContain("second");
@@ -188,18 +164,14 @@ describe("BashManager Integration Tests", () => {
 
   describe("Text Processing", () => {
     it("should support grep", async () => {
-      await bashManager.execute(
-        "echo -e 'apple\\nbanana\\ncherry' > fruits.txt"
-      );
+      await bashManager.execute("echo -e 'apple\\nbanana\\ncherry' > fruits.txt");
       const result = await bashManager.execute("grep 'an' fruits.txt");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("banana");
     });
 
     it("should support wc (word count)", async () => {
-      await bashManager.execute(
-        "echo -e 'line 1\\nline 2\\nline 3' > count.txt"
-      );
+      await bashManager.execute("echo -e 'line 1\\nline 2\\nline 3' > count.txt");
       const result = await bashManager.execute("wc -l count.txt");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("3");
@@ -207,27 +179,21 @@ describe("BashManager Integration Tests", () => {
 
     it("should support sed", async () => {
       await bashManager.execute("echo 'hello world' > sed_test.txt");
-      const result = await bashManager.execute(
-        "sed 's/world/universe/' sed_test.txt"
-      );
+      const result = await bashManager.execute("sed 's/world/universe/' sed_test.txt");
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe("hello universe");
     });
 
     it("should support awk", async () => {
       await bashManager.execute("echo -e '1 2 3\\n4 5 6' > numbers.txt");
-      const result = await bashManager.execute(
-        "awk '{print $2}' numbers.txt"
-      );
+      const result = await bashManager.execute("awk '{print $2}' numbers.txt");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("2");
       expect(result.stdout).toContain("5");
     });
 
     it("should support head", async () => {
-      await bashManager.execute(
-        "echo -e 'line1\\nline2\\nline3\\nline4\\nline5' > head_test.txt"
-      );
+      await bashManager.execute("echo -e 'line1\\nline2\\nline3\\nline4\\nline5' > head_test.txt");
       const result = await bashManager.execute("head -n 2 head_test.txt");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("line1");
@@ -236,9 +202,7 @@ describe("BashManager Integration Tests", () => {
     });
 
     it("should support tail", async () => {
-      await bashManager.execute(
-        "echo -e 'line1\\nline2\\nline3\\nline4\\nline5' > tail_test.txt"
-      );
+      await bashManager.execute("echo -e 'line1\\nline2\\nline3\\nline4\\nline5' > tail_test.txt");
       const result = await bashManager.execute("tail -n 2 tail_test.txt");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("line4");
@@ -259,9 +223,7 @@ describe("BashManager Integration Tests", () => {
 
   describe("JSON Processing with jq", () => {
     it("should process JSON with jq", async () => {
-      await bashManager.execute(
-        'echo \'{"name":"Alice","age":30}\' > data.json'
-      );
+      await bashManager.execute('echo \'{"name":"Alice","age":30}\' > data.json');
       const result = await bashManager.execute("cat data.json | jq '.name'");
       expect(result.exitCode).toBe(0);
       expect(result.stdout.trim()).toBe('"Alice"');
@@ -271,9 +233,7 @@ describe("BashManager Integration Tests", () => {
       await bashManager.execute(
         'echo \'[{"name":"Alice","age":30},{"name":"Bob","age":25}]\' > users.json'
       );
-      const result = await bashManager.execute(
-        "cat users.json | jq '.[].name'"
-      );
+      const result = await bashManager.execute("cat users.json | jq '.[].name'");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('"Alice"');
       expect(result.stdout).toContain('"Bob"');
@@ -283,7 +243,9 @@ describe("BashManager Integration Tests", () => {
   describe("Find Command", () => {
     it("should find files by name", async () => {
       await bashManager.execute("mkdir -p findtest/sub1 findtest/sub2");
-      await bashManager.execute("touch findtest/file1.py findtest/sub1/file2.py findtest/sub2/file3.txt");
+      await bashManager.execute(
+        "touch findtest/file1.py findtest/sub1/file2.py findtest/sub2/file3.txt"
+      );
       const result = await bashManager.execute("find findtest -name '*.py'");
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("file1.py");
@@ -355,18 +317,14 @@ with open('/workspace/numbers.txt', 'w') as f:
 
   describe("Execution Limits", () => {
     it("should prevent infinite loops", async () => {
-      const result = await bashManager.execute(
-        "while true; do echo 'infinite'; done"
-      );
+      const result = await bashManager.execute("while true; do echo 'infinite'; done");
       expect(result.exitCode).not.toBe(0);
       expect(result.stderr).toContain("maxLoopIterations");
     });
 
     it("should prevent excessive command execution", async () => {
       // Create a script that exceeds command count limit
-      const script = Array(11000)
-        .fill("echo x")
-        .join("; ");
+      const script = Array(11000).fill("echo x").join("; ");
       const result = await bashManager.execute(script);
       expect(result.exitCode).not.toBe(0);
     });

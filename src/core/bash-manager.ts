@@ -71,10 +71,7 @@ export class BashManager {
   /**
    * Execute a bash command
    */
-  async execute(
-    command: string,
-    options?: BashExecutionOptions
-  ): Promise<BashExecutionResult> {
+  async execute(command: string, options?: BashExecutionOptions): Promise<BashExecutionResult> {
     if (!this.initialized || !this.bash) {
       await this.initialize();
     }
@@ -97,8 +94,7 @@ export class BashManager {
       };
     } catch (error) {
       // Handle execution errors
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
       return {
         stdout: "",

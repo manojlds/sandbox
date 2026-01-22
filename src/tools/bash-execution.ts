@@ -50,9 +50,7 @@ Examples:
         cwd: z
           .string()
           .optional()
-          .describe(
-            "Working directory (relative to /workspace, e.g., 'subdir' or '.')"
-          ),
+          .describe("Working directory (relative to /workspace, e.g., 'subdir' or '.')"),
       },
     },
     async ({ command, cwd }) => {
@@ -97,8 +95,7 @@ Examples:
           };
         }
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
         return {
           content: [
             {
