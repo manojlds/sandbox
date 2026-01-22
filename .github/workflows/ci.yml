@@ -41,8 +41,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run integration tests
-        run: npm run test
+      - name: Run tests
+        run: npm run test:ci
 
       - name: Check package can be packed
         run: npm pack --dry-run

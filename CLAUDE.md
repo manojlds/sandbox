@@ -31,7 +31,8 @@ npm run dev
 npm run build
 
 # Run tests
-npm test
+npm test                    # Run all tests (includes integration tests)
+npm run test:ci             # Run CI tests (excludes integration tests requiring network)
 
 # Run specific test file
 npm test -- test/bash-only.test.ts
@@ -56,6 +57,17 @@ npm run validate            # type-check + lint + format:check + build
 # Clean build artifacts
 npm run clean
 ```
+
+### CI/CD
+
+The project uses GitHub Actions for continuous integration:
+
+**CI Test Strategy:**
+- `npm run test:ci` - Skips integration tests that require Pyodide network access
+- Environment variable `CI=true` or `GITHUB_ACTIONS=true` triggers exclusion
+- Bash tests always run (no network required)
+- Pyodide unit tests run (no network required)
+- Integration tests skip in CI (require network for Pyodide CDN)
 
 ### Pre-commit Checklist
 

@@ -1,5 +1,8 @@
 import { defineConfig } from "vitest/config";
 
+// In CI environments, skip integration tests that require Pyodide network access
+const isCI = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
+
 export default defineConfig({
   test: {
     globals: true,
@@ -8,6 +11,7 @@ export default defineConfig({
     hookTimeout: 30000,
     teardownTimeout: 10000,
     include: ["test/**/*.test.ts"],
+    exclude: isCI ? ["test/integration.test.ts"] : [],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
