@@ -276,8 +276,8 @@ Customize the server behavior with environment variables:
       "cwd": "/path/to/mcp/heimdall",
       "env": {
         "HEIMDALL_WORKSPACE": "/custom/workspace/path",
-        "MAX_FILE_SIZE": "52428800",
-        "MAX_WORKSPACE_SIZE": "524288000"
+        "HEIMDALL_MAX_FILE_SIZE": "52428800",
+        "HEIMDALL_MAX_WORKSPACE_SIZE": "524288000"
       }
     }
   }
@@ -289,12 +289,12 @@ Customize the server behavior with environment variables:
 | Variable | Description | Default | Format |
 |----------|-------------|---------|--------|
 | `HEIMDALL_WORKSPACE` | Path to workspace directory | `./workspace` | Absolute or relative path |
-| `MAX_FILE_SIZE` | Maximum size for a single file | `10485760` (10MB) | Bytes (positive integer) |
-| `MAX_WORKSPACE_SIZE` | Maximum total workspace size | `104857600` (100MB) | Bytes (positive integer) |
+| `HEIMDALL_MAX_FILE_SIZE` | Maximum size for a single file | `10485760` (10MB) | Bytes (positive integer) |
+| `HEIMDALL_MAX_WORKSPACE_SIZE` | Maximum total workspace size | `104857600` (100MB) | Bytes (positive integer) |
 
 **Example:** To allow 50MB files and 500MB total workspace:
-- `MAX_FILE_SIZE`: `52428800` (50 * 1024 * 1024)
-- `MAX_WORKSPACE_SIZE`: `524288000` (500 * 1024 * 1024)
+- `HEIMDALL_MAX_FILE_SIZE`: `52428800` (50 * 1024 * 1024)
+- `HEIMDALL_MAX_WORKSPACE_SIZE`: `524288000` (500 * 1024 * 1024)
 
 ## Security
 

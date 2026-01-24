@@ -43,22 +43,22 @@ function parseSizeLimit(envValue: string | undefined, defaultValue: number, name
 
 /**
  * Maximum size for a single file (default: 10MB)
- * Configure via MAX_FILE_SIZE environment variable (in bytes)
+ * Configure via HEIMDALL_MAX_FILE_SIZE environment variable (in bytes)
  */
 export const MAX_FILE_SIZE = parseSizeLimit(
-  process.env.MAX_FILE_SIZE,
+  process.env.HEIMDALL_MAX_FILE_SIZE,
   10 * 1024 * 1024,
-  "MAX_FILE_SIZE"
+  "HEIMDALL_MAX_FILE_SIZE"
 );
 
 /**
  * Maximum total workspace size (default: 100MB)
- * Configure via MAX_WORKSPACE_SIZE environment variable (in bytes)
+ * Configure via HEIMDALL_MAX_WORKSPACE_SIZE environment variable (in bytes)
  */
 export const MAX_WORKSPACE_SIZE = parseSizeLimit(
-  process.env.MAX_WORKSPACE_SIZE,
+  process.env.HEIMDALL_MAX_WORKSPACE_SIZE,
   100 * 1024 * 1024,
-  "MAX_WORKSPACE_SIZE"
+  "HEIMDALL_MAX_WORKSPACE_SIZE"
 );
 
 // Ensure workspace exists
