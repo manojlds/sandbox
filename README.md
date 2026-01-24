@@ -277,7 +277,8 @@ Customize the server behavior with environment variables:
       "env": {
         "HEIMDALL_WORKSPACE": "/custom/workspace/path",
         "HEIMDALL_MAX_FILE_SIZE": "52428800",
-        "HEIMDALL_MAX_WORKSPACE_SIZE": "524288000"
+        "HEIMDALL_MAX_WORKSPACE_SIZE": "524288000",
+        "HEIMDALL_PYTHON_EXECUTION_TIMEOUT_MS": "5000"
       }
     }
   }
@@ -291,6 +292,7 @@ Customize the server behavior with environment variables:
 | `HEIMDALL_WORKSPACE` | Path to workspace directory | `./workspace` | Absolute or relative path |
 | `HEIMDALL_MAX_FILE_SIZE` | Maximum size for a single file | `10485760` (10MB) | Bytes (positive integer) |
 | `HEIMDALL_MAX_WORKSPACE_SIZE` | Maximum total workspace size | `104857600` (100MB) | Bytes (positive integer) |
+| `HEIMDALL_PYTHON_EXECUTION_TIMEOUT_MS` | Python execution timeout | `5000` | Milliseconds (positive integer) |
 
 **Example:** To allow 50MB files and 500MB total workspace:
 - `HEIMDALL_MAX_FILE_SIZE`: `52428800` (50 * 1024 * 1024)

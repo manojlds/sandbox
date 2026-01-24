@@ -24,6 +24,7 @@ The code runs in an isolated WebAssembly sandbox with:
 - Standard library and auto-loaded packages
 - stdout/stderr capture for output
 - NO network access (WebAssembly security boundary)
+- Execution time limits to prevent long-running scripts
 
 Returns execution results including output and any errors.`,
       inputSchema: {
