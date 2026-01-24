@@ -259,7 +259,11 @@ Delete a file or empty directory.
 
 ## Workspace
 
-Files are stored in the `workspace/` directory. Customize with `PYODIDE_WORKSPACE` env var:
+Files are stored in the `workspace/` directory.
+
+### Configuration
+
+Customize the server behavior with environment variables:
 
 ```json
 {
@@ -269,12 +273,26 @@ Files are stored in the `workspace/` directory. Customize with `PYODIDE_WORKSPAC
       "args": ["dist/server.js"],
       "cwd": "/path/to/mcp/pyodide-sandbox",
       "env": {
-        "PYODIDE_WORKSPACE": "/custom/workspace/path"
+        "PYODIDE_WORKSPACE": "/custom/workspace/path",
+        "MAX_FILE_SIZE": "52428800",
+        "MAX_WORKSPACE_SIZE": "524288000"
       }
     }
   }
 }
 ```
+
+**Available environment variables:**
+
+| Variable | Description | Default | Format |
+|----------|-------------|---------|--------|
+| `PYODIDE_WORKSPACE` | Path to workspace directory | `./workspace` | Absolute or relative path |
+| `MAX_FILE_SIZE` | Maximum size for a single file | `10485760` (10MB) | Bytes (positive integer) |
+| `MAX_WORKSPACE_SIZE` | Maximum total workspace size | `104857600` (100MB) | Bytes (positive integer) |
+
+**Example:** To allow 50MB files and 500MB total workspace:
+- `MAX_FILE_SIZE`: `52428800` (50 * 1024 * 1024)
+- `MAX_WORKSPACE_SIZE`: `524288000` (500 * 1024 * 1024)
 
 ## Security
 

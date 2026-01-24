@@ -18,14 +18,48 @@ export const WORKSPACE_DIR =
 export const VIRTUAL_WORKSPACE = "/workspace";
 
 /**
- * Maximum size for a single file (10MB)
+ * Parse and validate a size limit from environment variable
+ * @param envValue - Environment variable value
+ * @param defaultValue - Default value in bytes
+ * @param name - Name of the configuration (for error messages)
+ * @returns Validated size in bytes
  */
-export const MAX_FILE_SIZE = 10 * 1024 * 1024;
+function parseSizeLimit(envValue: string | undefined, defaultValue: number, name: string): number {
+  if (!envValue) {
+    return defaultValue;
+  }
+
+  const parsed = parseInt(envValue, 10);
+
+  if (isNaN(parsed) || parsed <= 0) {
+    console.error(
+      `[Config] Invalid ${name}: "${envValue}". Must be a positive number. Using default: ${defaultValue} bytes`
+    );
+    return defaultValue;
+  }
+
+  return parsed;
+}
 
 /**
- * Maximum total workspace size (100MB)
+ * Maximum size for a single file (default: 10MB)
+ * Configure via MAX_FILE_SIZE environment variable (in bytes)
  */
-export const MAX_WORKSPACE_SIZE = 100 * 1024 * 1024;
+export const MAX_FILE_SIZE = parseSizeLimit(
+  process.env.MAX_FILE_SIZE,
+  10 * 1024 * 1024,
+  "MAX_FILE_SIZE"
+);
+
+/**
+ * Maximum total workspace size (default: 100MB)
+ * Configure via MAX_WORKSPACE_SIZE environment variable (in bytes)
+ */
+export const MAX_WORKSPACE_SIZE = parseSizeLimit(
+  process.env.MAX_WORKSPACE_SIZE,
+  100 * 1024 * 1024,
+  "MAX_WORKSPACE_SIZE"
+);
 
 // Ensure workspace exists
 if (!fs.existsSync(WORKSPACE_DIR)) {

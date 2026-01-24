@@ -300,9 +300,21 @@ These warnings come from Pyodide's FS API which uses `any` types. They can be sa
 # Workspace directory (default: ./workspace)
 PYODIDE_WORKSPACE=/path/to/workspace
 
+# Maximum size for a single file in bytes (default: 10485760 = 10MB)
+MAX_FILE_SIZE=52428800  # Example: 50MB
+
+# Maximum total workspace size in bytes (default: 104857600 = 100MB)
+MAX_WORKSPACE_SIZE=524288000  # Example: 500MB
+
 # Node.js memory limit
 NODE_OPTIONS="--max-old-space-size=4096"
 ```
+
+**Configuration Notes:**
+- All size limits must be positive integers in bytes
+- Invalid values will fallback to defaults with a warning
+- File size checks happen during write operations
+- Workspace size checks happen before writing new files
 
 ## Troubleshooting
 
