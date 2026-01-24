@@ -882,6 +882,37 @@ This provides immediate value with minimal complexity, and positions us to adopt
 
 ---
 
+## Codebase Review: Improvement Opportunities
+
+The following items come directly from reviewing the current implementation and comparing it to LocalSandbox capabilities.
+
+### 1. Add Execution Timeouts for Python Runs
+**Current State:** `executeCode` runs unbounded, so a tight loop can block the server indefinitely.  
+**LocalSandbox Comparison:** uses per-command subprocess isolation which naturally bounds execution time.  
+**Recommendation:** add a configurable timeout wrapper and return a structured timeout error response.
+
+### 2. Cache Package Installs and Report Failures
+**Current State:** `executeCode` attempts package installs but only logs failures, so callers don't see install errors.  
+**LocalSandbox Comparison:** returns structured results for each command, including errors and timing.  
+**Recommendation:** track installed packages in-memory and surface install failures in the response payload.
+
+### 3. Standardize Structured Results Across Tools
+**Current State:** Python and filesystem tools include structured content; bash tool only returns text and errors.  
+**LocalSandbox Comparison:** uniform response schema with stdout/stderr/exit_code/duration.  
+**Recommendation:** return a consistent payload for bash (stdout/stderr/exit_code/duration_ms) and for Python (include duration_ms).
+
+### 4. Introduce Snapshots for Workspace State
+**Current State:** workspace persistence relies on host filesystem; no snapshot/export support.  
+**LocalSandbox Comparison:** AgentFS snapshots allow export/restore and reproducibility.  
+**Recommendation:** add snapshot tooling (tarball or sqlite export) to align with LocalSandbox portability.
+
+### 5. Unify Filesystem Views Between Bash and Pyodide
+**Current State:** Pyodide uses an in-memory virtual FS plus sync; bash operates directly on host FS.  
+**LocalSandbox Comparison:** both runtimes share the same virtual FS (AgentFS).  
+**Recommendation:** consider a shared abstraction (or sync optimizations) so both runtimes read the same state without repeated full syncs.
+
+---
+
 ## References
 
 - [LocalSandbox Repository](https://github.com/coplane/localsandbox)
