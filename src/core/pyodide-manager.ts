@@ -17,6 +17,7 @@ import {
   VIRTUAL_WORKSPACE,
   MAX_FILE_SIZE,
   MAX_WORKSPACE_SIZE,
+  PYTHON_EXECUTION_TIMEOUT_MS,
 } from "../config/constants.js";
 import type {
   ExecutionResult,
@@ -31,6 +32,7 @@ export class PyodideManager {
   private pyodide: PyodideInterface | null = null;
   private initialized = false;
   private initializationPromise: Promise<PyodideInterface> | null = null;
+  private interruptBuffer: Int32Array | null = null;
 
   /**
    * Convert a virtual path to a host filesystem path.
@@ -153,6 +155,12 @@ export class PyodideManager {
 
     // Create workspace directory in virtual filesystem
     this.pyodide.FS.mkdirTree(VIRTUAL_WORKSPACE);
+
+    // Set up interruption buffer for timeouts (SharedArrayBuffer is required)
+    if (!this.interruptBuffer && typeof SharedArrayBuffer !== "undefined") {
+      this.interruptBuffer = new Int32Array(new SharedArrayBuffer(4));
+      this.pyodide.setInterruptBuffer(this.interruptBuffer);
+    }
 
     // Load micropip for package installation with proper error handling
     // Note: micropip loading may fail in some environments (restricted network, etc.)
@@ -345,6 +353,16 @@ if '${escapedWorkspacePath}' not in sys.path:
       batched: (text: string) => stderrBuffer.push(text),
     });
 
+    let timeoutId: NodeJS.Timeout | null = null;
+    let timedOut = false;
+    if (this.interruptBuffer && PYTHON_EXECUTION_TIMEOUT_MS > 0) {
+      Atomics.store(this.interruptBuffer, 0, 0);
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        Atomics.store(this.interruptBuffer!, 0, 1);
+      }, PYTHON_EXECUTION_TIMEOUT_MS);
+    }
+
     try {
       // Set working directory to workspace
       const escapedWorkspacePath = VIRTUAL_WORKSPACE.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -392,12 +410,20 @@ if '${escapedWorkspacePath}' not in sys.path:
         stdout: stdoutBuffer.join(""),
         stderr: stderrBuffer.join(""),
         result: null,
-        error: errorMessage,
+        error: timedOut
+          ? `Execution timed out after ${PYTHON_EXECUTION_TIMEOUT_MS}ms`
+          : errorMessage,
       };
     } finally {
       // Reset stdout/stderr to defaults
       py.setStdout({ batched: (text: string) => process.stdout.write(text + "\n") });
       py.setStderr({ batched: (text: string) => process.stderr.write(text + "\n") });
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (this.interruptBuffer) {
+        Atomics.store(this.interruptBuffer, 0, 0);
+      }
     }
   }
 
