@@ -5,13 +5,19 @@
  * - Initialization and lifecycle management
  * - Virtual filesystem operations
  * - Host <-> Virtual filesystem synchronization
- * - Python code execution
+ * - Python code execution (via worker thread for timeout support)
  * - Package installation
+ *
+ * Code execution runs in a separate worker thread to enable true timeout
+ * enforcement. If Python code blocks indefinitely (infinite loops, etc.),
+ * the worker can be terminated to enforce the timeout.
  */
 
 import { loadPyodide, PyodideInterface } from "pyodide";
+import { Worker } from "worker_threads";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import {
   WORKSPACE_DIR,
   VIRTUAL_WORKSPACE,
@@ -28,11 +34,38 @@ import type {
   PackageInstallResult,
 } from "../types/index.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+interface WorkerExecuteResult {
+  type: "result";
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  result: string | null;
+  error: string | null;
+}
+
+interface WorkerReadyMessage {
+  type: "ready";
+}
+
+interface WorkerErrorMessage {
+  type: "error";
+  error: string;
+}
+
+type WorkerMessage = WorkerExecuteResult | WorkerReadyMessage | WorkerErrorMessage;
+
 export class PyodideManager {
   private pyodide: PyodideInterface | null = null;
   private initialized = false;
   private initializationPromise: Promise<PyodideInterface> | null = null;
-  private interruptBuffer: Int32Array | null = null;
+
+  // Worker thread for code execution with timeout support
+  private worker: Worker | null = null;
+  private workerReady = false;
+  private workerInitPromise: Promise<void> | null = null;
 
   /**
    * Convert a virtual path to a host filesystem path.
@@ -155,12 +188,6 @@ export class PyodideManager {
 
     // Create workspace directory in virtual filesystem
     this.pyodide.FS.mkdirTree(VIRTUAL_WORKSPACE);
-
-    // Set up interruption buffer for timeouts (SharedArrayBuffer is required)
-    if (!this.interruptBuffer && typeof SharedArrayBuffer !== "undefined") {
-      this.interruptBuffer = new Int32Array(new SharedArrayBuffer(4));
-      this.pyodide.setInterruptBuffer(this.interruptBuffer);
-    }
 
     // Load micropip for package installation with proper error handling
     // Note: micropip loading may fail in some environments (restricted network, etc.)
@@ -319,112 +346,204 @@ if '${escapedWorkspacePath}' not in sys.path:
   }
 
   /**
-   * Execute Python code in the sandbox
+   * Initialize the worker thread for code execution
+   */
+  private async initializeWorker(): Promise<void> {
+    if (this.workerReady && this.worker) {
+      return;
+    }
+
+    if (this.workerInitPromise) {
+      return this.workerInitPromise;
+    }
+
+    this.workerInitPromise = this.doInitializeWorker();
+
+    try {
+      await this.workerInitPromise;
+    } catch (error) {
+      this.workerInitPromise = null;
+      throw error;
+    }
+  }
+
+  private async doInitializeWorker(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Get the worker file path from the dist folder (built JavaScript)
+      // We use the compiled JS to avoid path resolution issues with tsx in workers
+      const distDir = path.resolve(__dirname, "..", "..", "dist", "core");
+      const workerJsPath = path.join(distDir, "pyodide-worker.js");
+
+      // Fallback to TypeScript source if dist doesn't exist (dev mode)
+      const srcDir = path.resolve(__dirname);
+      const workerTsPath = path.join(srcDir, "pyodide-worker.ts");
+
+      let workerPath: string;
+      let execArgv: string[] = [];
+
+      if (fs.existsSync(workerJsPath)) {
+        workerPath = workerJsPath;
+      } else if (fs.existsSync(workerTsPath)) {
+        workerPath = workerTsPath;
+        execArgv = ["--import", "tsx"];
+      } else {
+        reject(new Error(`Worker file not found at ${workerJsPath} or ${workerTsPath}`));
+        return;
+      }
+
+      console.error(`[Heimdall] Starting worker thread from ${workerPath}...`);
+
+      this.worker = new Worker(workerPath, {
+        workerData: {
+          workspaceDir: WORKSPACE_DIR,
+          virtualWorkspace: VIRTUAL_WORKSPACE,
+        },
+        execArgv,
+      });
+
+      const initTimeout = setTimeout(() => {
+        this.terminateWorker();
+        reject(new Error("Worker initialization timed out"));
+      }, 60000); // 60 second timeout for initialization (Pyodide loading is slow)
+
+      this.worker.on("message", (message: WorkerMessage) => {
+        if (message.type === "ready") {
+          clearTimeout(initTimeout);
+          this.workerReady = true;
+          console.error("[Heimdall] Worker thread ready");
+          resolve();
+        } else if (message.type === "error") {
+          clearTimeout(initTimeout);
+          reject(new Error(message.error));
+        }
+      });
+
+      this.worker.on("error", (error) => {
+        clearTimeout(initTimeout);
+        this.workerReady = false;
+        reject(error);
+      });
+
+      this.worker.on("exit", (code) => {
+        this.workerReady = false;
+        this.worker = null;
+        this.workerInitPromise = null;
+        if (code !== 0) {
+          console.error(`[Heimdall] Worker exited with code ${code}`);
+        }
+      });
+    });
+  }
+
+  /**
+   * Terminate the worker thread
+   */
+  private terminateWorker(): void {
+    if (this.worker) {
+      void this.worker.terminate();
+      this.worker = null;
+      this.workerReady = false;
+      this.workerInitPromise = null;
+    }
+  }
+
+  /**
+   * Execute Python code in the sandbox using a worker thread
    *
    * Network access is NOT available - Pyodide runs in WebAssembly which
    * doesn't have network capabilities. This is by design for security.
+   *
+   * The code runs in a separate worker thread, enabling true timeout
+   * enforcement. If the code doesn't complete within the timeout,
+   * the worker is terminated.
    */
   async executeCode(code: string, packages: string[] = []): Promise<ExecutionResult> {
-    const py = await this.initialize();
+    // Initialize worker if needed
+    await this.initializeWorker();
 
-    // Sync before execution
-    await this.syncHostToVirtual();
-
-    // Install requested packages
-    if (packages.length > 0) {
-      const micropip = py.pyimport("micropip");
-      for (const pkg of packages) {
-        try {
-          await micropip.install(pkg);
-        } catch (e) {
-          console.error(`[Pyodide] Failed to install ${pkg}:`, e);
-        }
-      }
-    }
-
-    // Capture stdout and stderr natively
-    const stdoutBuffer: string[] = [];
-    const stderrBuffer: string[] = [];
-
-    py.setStdout({
-      batched: (text: string) => stdoutBuffer.push(text),
-    });
-    py.setStderr({
-      batched: (text: string) => stderrBuffer.push(text),
-    });
-
-    let timeoutId: NodeJS.Timeout | null = null;
-    let timedOut = false;
-    if (this.interruptBuffer && PYTHON_EXECUTION_TIMEOUT_MS > 0) {
-      Atomics.store(this.interruptBuffer, 0, 0);
-      timeoutId = setTimeout(() => {
-        timedOut = true;
-        Atomics.store(this.interruptBuffer!, 0, 1);
-      }, PYTHON_EXECUTION_TIMEOUT_MS);
-    }
-
-    try {
-      // Set working directory to workspace
-      const escapedWorkspacePath = VIRTUAL_WORKSPACE.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
-      py.runPython(`import os; os.chdir('${escapedWorkspacePath}')`);
-
-      // Auto-detect and load packages from imports in the code
-      await py.loadPackagesFromImports(code);
-
-      // Run user code directly using runPythonAsync
-      const result = await py.runPythonAsync(code);
-
-      // Sync back to host after execution
-      await this.syncVirtualToHost();
-
-      // Convert result to string representation if it exists
-      let resultStr: string | null = null;
-      if (result !== undefined && result !== null) {
-        try {
-          resultStr = py.runPython(`repr(${JSON.stringify(result)})`);
-        } catch {
-          resultStr = String(result);
-        }
-      }
-
-      return {
-        success: true,
-        stdout: stdoutBuffer.join(""),
-        stderr: stderrBuffer.join(""),
-        result: resultStr,
-        error: null,
-      };
-    } catch (e) {
-      // Sync even on error (code may have written files before failing)
-      await this.syncVirtualToHost();
-
-      let errorMessage: string;
-      if (e instanceof Error) {
-        errorMessage = e.message;
-      } else {
-        errorMessage = String(e);
-      }
-
+    if (!this.worker) {
       return {
         success: false,
-        stdout: stdoutBuffer.join(""),
-        stderr: stderrBuffer.join(""),
+        stdout: "",
+        stderr: "",
         result: null,
-        error: timedOut
-          ? `Execution timed out after ${PYTHON_EXECUTION_TIMEOUT_MS}ms`
-          : errorMessage,
+        error: "Worker thread not available",
       };
-    } finally {
-      // Reset stdout/stderr to defaults
-      py.setStdout({ batched: (text: string) => process.stdout.write(text + "\n") });
-      py.setStderr({ batched: (text: string) => process.stderr.write(text + "\n") });
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      if (this.interruptBuffer) {
-        Atomics.store(this.interruptBuffer, 0, 0);
-      }
     }
+
+    return new Promise((resolve) => {
+      let timeoutId: NodeJS.Timeout | null = null;
+      let resolved = false;
+
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+      };
+
+      const handleMessage = (message: WorkerMessage) => {
+        if (resolved) return;
+
+        if (message.type === "result") {
+          resolved = true;
+          cleanup();
+          this.worker?.off("message", handleMessage);
+          resolve({
+            success: message.success,
+            stdout: message.stdout,
+            stderr: message.stderr,
+            result: message.result,
+            error: message.error,
+          });
+        } else if (message.type === "error") {
+          resolved = true;
+          cleanup();
+          this.worker?.off("message", handleMessage);
+          resolve({
+            success: false,
+            stdout: "",
+            stderr: "",
+            result: null,
+            error: message.error,
+          });
+        }
+      };
+
+      // Worker is guaranteed to be non-null here due to the check above
+      const worker = this.worker!;
+      worker.on("message", handleMessage);
+
+      // Set up timeout
+      if (PYTHON_EXECUTION_TIMEOUT_MS > 0) {
+        timeoutId = setTimeout(() => {
+          if (resolved) return;
+          resolved = true;
+
+          console.error(
+            `[Heimdall] Python execution timed out after ${PYTHON_EXECUTION_TIMEOUT_MS}ms, terminating worker`
+          );
+
+          // Terminate the worker to stop the infinite loop
+          this.terminateWorker();
+
+          resolve({
+            success: false,
+            stdout: "",
+            stderr: "",
+            result: null,
+            error: `Execution timed out after ${PYTHON_EXECUTION_TIMEOUT_MS}ms`,
+          });
+        }, PYTHON_EXECUTION_TIMEOUT_MS);
+      }
+
+      // Send execute message to worker
+      worker.postMessage({
+        type: "execute",
+        code,
+        packages,
+      });
+    });
   }
 
   /**
