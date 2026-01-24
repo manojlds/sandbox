@@ -937,17 +937,17 @@ const envSchema = z.object({
   HEIMDALL_WORKSPACE: z.string().optional().default(
     path.join(process.cwd(), 'workspace')
   ),
-  LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-  MAX_FILE_SIZE: z.coerce.number().positive().default(10 * 1024 * 1024),
-  MAX_WORKSPACE_SIZE: z.coerce.number().positive().default(100 * 1024 * 1024),
-  EXECUTION_TIMEOUT: z.coerce.number().positive().default(30000),
+  HEIMDALL_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  HEIMDALL_MAX_FILE_SIZE: z.coerce.number().positive().default(10 * 1024 * 1024),
+  HEIMDALL_MAX_WORKSPACE_SIZE: z.coerce.number().positive().default(100 * 1024 * 1024),
+  HEIMDALL_EXECUTION_TIMEOUT: z.coerce.number().positive().default(30000),
 });
 
 export const env = envSchema.parse(process.env);
 
 // Usage
 export const WORKSPACE_DIR = env.HEIMDALL_WORKSPACE;
-export const MAX_FILE_SIZE = env.MAX_FILE_SIZE;
+export const MAX_FILE_SIZE = env.HEIMDALL_MAX_FILE_SIZE;
 ```
 
 **Effort:** Low-Medium (2 hours)

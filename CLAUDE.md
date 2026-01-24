@@ -301,10 +301,10 @@ These warnings come from Pyodide's FS API which uses `any` types. They can be sa
 HEIMDALL_WORKSPACE=/path/to/workspace
 
 # Maximum size for a single file in bytes (default: 10485760 = 10MB)
-MAX_FILE_SIZE=52428800  # Example: 50MB
+HEIMDALL_MAX_FILE_SIZE=52428800  # Example: 50MB
 
 # Maximum total workspace size in bytes (default: 104857600 = 100MB)
-MAX_WORKSPACE_SIZE=524288000  # Example: 500MB
+HEIMDALL_MAX_WORKSPACE_SIZE=524288000  # Example: 500MB
 
 # Node.js memory limit
 NODE_OPTIONS="--max-old-space-size=4096"
