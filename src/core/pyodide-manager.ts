@@ -33,6 +33,7 @@ import type {
   FileDeleteResult,
   PackageInstallResult,
 } from "../types/index.js";
+import { AsyncLock } from "../utils/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +67,10 @@ export class PyodideManager {
   private worker: Worker | null = null;
   private workerReady = false;
   private workerInitPromise: Promise<void> | null = null;
+
+  // Write lock to prevent TOCTOU race conditions during file operations
+  // This ensures workspace size checks and writes are atomic
+  private writeLock = new AsyncLock();
 
   /**
    * Convert a virtual path to a host filesystem path.
@@ -672,6 +677,10 @@ if '${escapedWorkspacePath}' not in sys.path:
 
   /**
    * Write a file to the virtual filesystem
+   *
+   * Uses a write lock to prevent TOCTOU race conditions where concurrent
+   * writes could bypass workspace size limits. The lock ensures that the
+   * size check and write operation are atomic.
    */
   async writeFile(filePath: string, content: string): Promise<FileWriteResult> {
     try {
@@ -680,7 +689,7 @@ if '${escapedWorkspacePath}' not in sys.path:
       const fullPath = this.validatePath(filePath);
       const hostPath = this.virtualToHostPath(fullPath);
 
-      // Validate file size
+      // Validate file size (can be done outside lock - it's a constant check)
       const fileSize = Buffer.byteLength(content, "utf8");
       if (fileSize > MAX_FILE_SIZE) {
         throw new Error(
@@ -689,18 +698,22 @@ if '${escapedWorkspacePath}' not in sys.path:
         );
       }
 
-      // Check workspace size limit
-      await this.checkWorkspaceSize(fileSize);
+      // Acquire write lock to prevent TOCTOU race conditions
+      // This ensures workspace size check and write are atomic
+      return await this.writeLock.acquire("workspace", async () => {
+        // Check workspace size limit (inside lock to prevent race)
+        await this.checkWorkspaceSize(fileSize);
 
-      // Ensure parent directory exists
-      const parentDir = path.posix.dirname(fullPath);
-      if (parentDir && parentDir !== "/" && !parentDir.includes("..")) {
-        py.FS.mkdirTree(parentDir);
-      }
+        // Ensure parent directory exists
+        const parentDir = path.posix.dirname(fullPath);
+        if (parentDir && parentDir !== "/" && !parentDir.includes("..")) {
+          py.FS.mkdirTree(parentDir);
+        }
 
-      py.FS.writeFile(fullPath, content, { encoding: "utf8" });
-      await this.syncVirtualPathToHost(fullPath, hostPath);
-      return { success: true, error: null };
+        py.FS.writeFile(fullPath, content, { encoding: "utf8" });
+        await this.syncVirtualPathToHost(fullPath, hostPath);
+        return { success: true, error: null };
+      });
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : String(e) };
     }
