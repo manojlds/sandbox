@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import { PyodideManager } from "../src/core/pyodide-manager.js";
-import { VIRTUAL_WORKSPACE } from "../src/config/constants.js";
+import { VIRTUAL_WORKSPACE, WORKSPACE_DIR } from "../src/config/constants.js";
 
 // Test workspace directory
 const TEST_WORKSPACE = path.join(process.cwd(), "test-workspace-async");
@@ -243,8 +243,12 @@ describe("PyodideManager - Async File Operations", () => {
       const fileMode = 0;
       const fileContent = Buffer.from("hello");
 
+      // Use WORKSPACE_DIR to ensure path validation passes (symlink protection)
       const virtualPath = `${VIRTUAL_WORKSPACE}/nested/hello.txt`;
-      const hostPath = path.join(TEST_WORKSPACE, "nested", "hello.txt");
+      const hostPath = path.join(WORKSPACE_DIR, "nested", "hello.txt");
+
+      // Ensure the workspace directory exists
+      await fs.promises.mkdir(WORKSPACE_DIR, { recursive: true });
 
       (manager as unknown as { pyodide: { FS: unknown } }).pyodide = {
         FS: {
@@ -254,14 +258,19 @@ describe("PyodideManager - Async File Operations", () => {
         },
       };
 
-      await (
-        manager as unknown as {
-          syncVirtualPathToHost: (virtualPath: string, hostPath: string) => Promise<void>;
-        }
-      ).syncVirtualPathToHost(virtualPath, hostPath);
+      try {
+        await (
+          manager as unknown as {
+            syncVirtualPathToHost: (virtualPath: string, hostPath: string) => Promise<void>;
+          }
+        ).syncVirtualPathToHost(virtualPath, hostPath);
 
-      const content = await fs.promises.readFile(hostPath, "utf8");
-      expect(content).toBe("hello");
+        const content = await fs.promises.readFile(hostPath, "utf8");
+        expect(content).toBe("hello");
+      } finally {
+        // Clean up the test file
+        await fs.promises.rm(path.join(WORKSPACE_DIR, "nested"), { recursive: true, force: true });
+      }
     });
   });
 });
