@@ -112,6 +112,73 @@ export class PyodideManager {
   }
 
   /**
+   * Resolve symlinks and validate that the real path is within the workspace.
+   * This prevents symlink-based path traversal attacks where an attacker creates
+   * a symlink inside the workspace pointing to a location outside.
+   *
+   * @param hostPath - The host filesystem path to validate
+   * @throws Error if the resolved path escapes the workspace
+   */
+  private async validateHostPathWithSymlinkResolution(hostPath: string): Promise<void> {
+    try {
+      // Get the real path by resolving all symlinks
+      const realPath = await fs.promises.realpath(hostPath);
+      const realWorkspace = await fs.promises.realpath(WORKSPACE_DIR);
+
+      // Ensure the real path is within the workspace
+      if (!realPath.startsWith(realWorkspace + path.sep) && realPath !== realWorkspace) {
+        throw new Error(
+          "Invalid path: Symlink points outside workspace. This is a security violation."
+        );
+      }
+    } catch (e) {
+      // If the file doesn't exist yet, we need to check parent directories for symlinks
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+        await this.validateParentPathForSymlinks(hostPath);
+      } else if ((e as Error).message?.includes("security violation")) {
+        throw e;
+      }
+      // Other errors (like EACCES) are acceptable - the operation will fail naturally
+    }
+  }
+
+  /**
+   * For files that don't exist yet, validate parent directories for symlinks.
+   * Walks up the path until we find an existing directory, then validates it.
+   */
+  private async validateParentPathForSymlinks(hostPath: string): Promise<void> {
+    let currentPath = path.dirname(hostPath);
+    const realWorkspace = await fs.promises.realpath(WORKSPACE_DIR);
+
+    while (currentPath !== path.dirname(currentPath)) {
+      // Stop at filesystem root
+      try {
+        const realPath = await fs.promises.realpath(currentPath);
+
+        // Check if this resolved path is within workspace
+        if (!realPath.startsWith(realWorkspace + path.sep) && realPath !== realWorkspace) {
+          throw new Error(
+            "Invalid path: Parent directory symlink points outside workspace. This is a security violation."
+          );
+        }
+
+        // Found a valid existing parent, we're done
+        return;
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+          // Keep walking up
+          currentPath = path.dirname(currentPath);
+        } else if ((e as Error).message?.includes("security violation")) {
+          throw e;
+        } else {
+          // Other error, bail
+          return;
+        }
+      }
+    }
+  }
+
+  /**
    * Calculate total workspace size from host filesystem
    * @returns Total size in bytes
    */
@@ -300,9 +367,13 @@ if '${escapedWorkspacePath}' not in sys.path:
 
   /**
    * Sync a specific virtual file or directory into the host filesystem.
+   * Includes symlink protection to prevent writing outside workspace.
    */
   private async syncVirtualPathToHost(virtualPath: string, hostPath: string): Promise<void> {
     if (!this.pyodide) return;
+
+    // SECURITY: Validate host path doesn't escape workspace via symlinks
+    await this.validateHostPathWithSymlinkResolution(hostPath);
 
     let stat: { mode: number };
     try {
@@ -315,12 +386,16 @@ if '${escapedWorkspacePath}' not in sys.path:
     if (!isDir) {
       const parentDir = path.dirname(hostPath);
       await fs.promises.mkdir(parentDir, { recursive: true });
+      // Re-validate after mkdir in case it created through a symlink
+      await this.validateHostPathWithSymlinkResolution(hostPath);
       const content = this.pyodide.FS.readFile(virtualPath);
       await fs.promises.writeFile(hostPath, content);
       return;
     }
 
     await fs.promises.mkdir(hostPath, { recursive: true });
+    // Re-validate after mkdir
+    await this.validateHostPathWithSymlinkResolution(hostPath);
 
     let items: string[];
     try {
@@ -339,6 +414,8 @@ if '${escapedWorkspacePath}' not in sys.path:
       if (itemIsDir) {
         await this.syncVirtualPathToHost(virtualItemPath, hostItemPath);
       } else {
+        // SECURITY: Validate each file path before writing
+        await this.validateHostPathWithSymlinkResolution(hostItemPath);
         const content = this.pyodide.FS.readFile(virtualItemPath);
         await fs.promises.writeFile(hostItemPath, content);
       }
@@ -580,6 +657,10 @@ if '${escapedWorkspacePath}' not in sys.path:
 
       const fullPath = this.validatePath(filePath);
       const hostPath = this.virtualToHostPath(fullPath);
+
+      // SECURITY: Validate host path doesn't escape workspace via symlinks
+      await this.validateHostPathWithSymlinkResolution(hostPath);
+
       await this.syncHostPathToVirtual(hostPath, fullPath);
 
       const content = py.FS.readFile(fullPath, { encoding: "utf8" });
@@ -633,6 +714,10 @@ if '${escapedWorkspacePath}' not in sys.path:
       const py = await this.initialize();
       const fullPath = dirPath ? this.validatePath(dirPath) : VIRTUAL_WORKSPACE;
       const hostPath = this.virtualToHostPath(fullPath);
+
+      // SECURITY: Validate host path doesn't escape workspace via symlinks
+      await this.validateHostPathWithSymlinkResolution(hostPath);
+
       await this.syncHostPathToVirtual(hostPath, fullPath);
 
       const items = py.FS.readdir(fullPath).filter((x: string) => x !== "." && x !== "..");
@@ -664,11 +749,9 @@ if '${escapedWorkspacePath}' not in sys.path:
       const hostPath = this.virtualToHostPath(fullPath);
       await this.syncHostPathToVirtual(hostPath, fullPath);
 
-      // Validate the host path is within workspace directory
-      const normalizedHostPath = path.normalize(hostPath);
-      if (!normalizedHostPath.startsWith(path.normalize(WORKSPACE_DIR))) {
-        throw new Error("Invalid path: Path traversal detected in host filesystem");
-      }
+      // SECURITY: Validate the host path with symlink resolution
+      // This prevents deleting files outside workspace via symlinks
+      await this.validateHostPathWithSymlinkResolution(hostPath);
 
       // Delete from virtual filesystem
       const stat = py.FS.stat(fullPath);

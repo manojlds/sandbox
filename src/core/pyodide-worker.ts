@@ -49,6 +49,61 @@ const { workspaceDir, virtualWorkspace } = workerData as WorkerData;
 let pyodide: PyodideInterface | null = null;
 
 /**
+ * Resolve symlinks and validate that the real path is within the workspace.
+ * This prevents symlink-based path traversal attacks.
+ *
+ * @param hostPath - The host filesystem path to validate
+ * @throws Error if the resolved path escapes the workspace
+ */
+async function validateHostPathWithSymlinkResolution(hostPath: string): Promise<void> {
+  try {
+    const realPath = await fs.promises.realpath(hostPath);
+    const realWorkspace = await fs.promises.realpath(workspaceDir);
+
+    if (!realPath.startsWith(realWorkspace + path.sep) && realPath !== realWorkspace) {
+      throw new Error(
+        "Invalid path: Symlink points outside workspace. This is a security violation."
+      );
+    }
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      await validateParentPathForSymlinks(hostPath);
+    } else if ((e as Error).message?.includes("security violation")) {
+      throw e;
+    }
+  }
+}
+
+/**
+ * For files that don't exist yet, validate parent directories for symlinks.
+ */
+async function validateParentPathForSymlinks(hostPath: string): Promise<void> {
+  let currentPath = path.dirname(hostPath);
+  const realWorkspace = await fs.promises.realpath(workspaceDir);
+
+  while (currentPath !== path.dirname(currentPath)) {
+    try {
+      const realPath = await fs.promises.realpath(currentPath);
+
+      if (!realPath.startsWith(realWorkspace + path.sep) && realPath !== realWorkspace) {
+        throw new Error(
+          "Invalid path: Parent directory symlink points outside workspace. This is a security violation."
+        );
+      }
+      return;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+        currentPath = path.dirname(currentPath);
+      } else if ((e as Error).message?.includes("security violation")) {
+        throw e;
+      } else {
+        return;
+      }
+    }
+  }
+}
+
+/**
  * Sync files from host filesystem to Pyodide virtual FS
  */
 async function syncHostToVirtual(
@@ -92,13 +147,17 @@ async function syncHostToVirtual(
 }
 
 /**
- * Sync files from Pyodide virtual FS to host filesystem
+ * Sync files from Pyodide virtual FS to host filesystem.
+ * Includes symlink protection to prevent writing outside workspace.
  */
 async function syncVirtualToHost(
   py: PyodideInterface,
   virtualPath: string,
   hostPath: string
 ): Promise<void> {
+  // SECURITY: Validate host path doesn't escape workspace via symlinks
+  await validateHostPathWithSymlinkResolution(hostPath);
+
   let stat: { mode: number };
   try {
     stat = py.FS.stat(virtualPath);
@@ -110,12 +169,16 @@ async function syncVirtualToHost(
   if (!isDir) {
     const parentDir = path.dirname(hostPath);
     await fs.promises.mkdir(parentDir, { recursive: true });
+    // Re-validate after mkdir
+    await validateHostPathWithSymlinkResolution(hostPath);
     const content = py.FS.readFile(virtualPath);
     await fs.promises.writeFile(hostPath, content);
     return;
   }
 
   await fs.promises.mkdir(hostPath, { recursive: true });
+  // Re-validate after mkdir
+  await validateHostPathWithSymlinkResolution(hostPath);
 
   let items: string[];
   try {
