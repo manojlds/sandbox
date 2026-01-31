@@ -40,7 +40,6 @@ A TypeScript MCP server providing **sandboxed Python and Bash execution** using 
 ## Installation
 
 ```bash
-cd mcp/heimdall
 npm install
 ```
 
@@ -69,7 +68,7 @@ Add to your Cursor settings (`~/.cursor/mcp.json` or workspace `.cursor/mcp.json
     "heimdall": {
       "command": "node",
       "args": ["dist/server.js"],
-      "cwd": "/path/to/mcp/heimdall"
+      "cwd": "/path/to/heimdall"
     }
   }
 }
@@ -83,7 +82,7 @@ Or for development with `tsx`:
     "heimdall": {
       "command": "npx",
       "args": ["tsx", "src/server.ts"],
-      "cwd": "/path/to/mcp/heimdall"
+      "cwd": "/path/to/heimdall"
     }
   }
 }
@@ -273,7 +272,7 @@ Customize the server behavior with environment variables:
     "heimdall": {
       "command": "node",
       "args": ["dist/server.js"],
-      "cwd": "/path/to/mcp/heimdall",
+      "cwd": "/path/to/heimdall",
       "env": {
         "HEIMDALL_WORKSPACE": "/custom/workspace/path",
         "HEIMDALL_MAX_FILE_SIZE": "52428800",
@@ -356,14 +355,26 @@ See [Pyodide Packages](https://pyodide.org/en/stable/usage/packages-in-pyodide.h
 ## Project Structure
 
 ```
-mcp/heimdall/
+heimdall/
 ├── src/
-│   └── server.ts       # MCP server with Pyodide integration
-├── dist/               # Compiled JavaScript (after build)
-├── workspace/          # Persistent file storage
-├── package.json
-├── tsconfig.json
-└── README.md
+│   ├── server.ts                # Entry point
+│   ├── config/
+│   │   └── constants.ts         # Configuration and limits
+│   ├── core/
+│   │   ├── bash-manager.ts      # Bash execution (just-bash)
+│   │   ├── pyodide-manager.ts   # Python execution coordinator
+│   │   ├── pyodide-worker.ts    # Worker thread for Python
+│   │   └── secure-fs.ts         # Secure filesystem wrapper
+│   ├── tools/
+│   │   ├── bash-execution.ts    # execute_bash tool
+│   │   ├── python-execution.ts  # execute_python tool
+│   │   └── filesystem.ts        # File operation tools
+│   ├── resources/               # MCP resource handlers
+│   ├── types/                   # TypeScript interfaces
+│   └── utils/                   # Utilities (async-lock, etc.)
+├── test/                        # Vitest tests
+├── dist/                        # Compiled output
+└── workspace/                   # Persistent file storage
 ```
 
 ## Development
@@ -372,6 +383,20 @@ mcp/heimdall/
 
 ```bash
 npm run build
+```
+
+### Test
+
+```bash
+npm test                 # Run all tests
+npm run test:watch       # Watch mode
+npm run test:coverage    # With coverage
+```
+
+### Validate (before committing)
+
+```bash
+npm run validate         # Type-check + lint + format + build
 ```
 
 ### Clean
