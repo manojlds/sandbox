@@ -24,35 +24,27 @@ Heimdall is an MCP server providing sandboxed Python and Bash execution. The cod
 
 ## Vulnerabilities Identified
 
-### CRITICAL: BashManager Lacks Symlink Protection
+### ~~CRITICAL: BashManager Lacks Symlink Protection~~ ✅ FIXED
 
-**File:** `src/core/bash-manager.ts`
-**Severity:** Critical
-**CVSS Score:** 8.1 (High)
+**File:** `src/core/bash-manager.ts`, `src/core/secure-fs.ts`
+**Severity:** Critical → **RESOLVED**
+**CVSS Score:** 8.1 (High) → **Mitigated**
 
-**Description:**
-The BashManager uses `ReadWriteFs` from `just-bash` which operates directly on the host filesystem without symlink validation. While PyodideManager has comprehensive symlink protection, bash commands can read/write through symlinks that escape the workspace.
+**Status:** ✅ **FIXED** - Implemented `SecureFs` wrapper with symlink validation.
 
-**Attack Scenario:**
-```bash
-# Attacker creates symlink in workspace
-ln -s /etc/passwd evil-link
+**Original Description:**
+The BashManager used `ReadWriteFs` from `just-bash` which operated directly on the host filesystem without symlink validation. Bash commands could read/write through symlinks that escape the workspace.
 
-# Bash command reads through symlink
-cat evil-link   # Returns /etc/passwd contents
+**Fix Applied:**
+1. Created `SecureFs` class (`src/core/secure-fs.ts`) that wraps `ReadWriteFs`
+2. All file operations now validate real paths via `fs.realpath()`
+3. Parent path validation for new file creation
+4. Symlink target validation blocks malicious `ln -s` commands
+5. BashManager now uses `SecureFs` instead of `ReadWriteFs`
 
-# Or write attack
-ln -s /home/user/.ssh/authorized_keys key-link
-echo "attacker-key" > key-link
-```
-
-**Impact:** Arbitrary file read/write on host system
-
-**Recommendation:**
-Implement symlink validation in BashManager similar to PyodideManager:
-1. Before any file operation, resolve real paths using `fs.realpath()`
-2. Validate resolved path stays within workspace directory
-3. Add integration tests for bash symlink attacks
+**Test Coverage:**
+- 16 bash symlink attack tests added (`test/bash-symlink-attack.test.ts`)
+- All 16 tests pass, covering: read, write, directory, nested, and relative symlink attacks
 
 ---
 
