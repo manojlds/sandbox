@@ -4,9 +4,15 @@
  * Provides a sandboxed bash environment with an in-memory virtual filesystem.
  * Commands are executed using just-bash, a TypeScript implementation of bash
  * that doesn't spawn real processes.
+ *
+ * SECURITY: Uses SecureFs wrapper to prevent symlink-based path traversal attacks.
+ * All file operations validate that resolved paths stay within the workspace.
+ *
+ * @see SECURITY-REVIEW.md for security details
  */
 
-import { Bash, ReadWriteFs } from "just-bash";
+import { Bash } from "just-bash";
+import { SecureFs } from "./secure-fs.js";
 import { WORKSPACE_DIR } from "../config/constants.js";
 import path from "path";
 
@@ -46,8 +52,10 @@ export class BashManager {
       return;
     }
 
-    // Create ReadWriteFs backed by our workspace directory
-    const fs = new ReadWriteFs({ root: this.workspaceDir });
+    // SECURITY: Use SecureFs instead of ReadWriteFs to prevent symlink attacks
+    // SecureFs validates all file operations to ensure they don't escape
+    // the workspace via symlinks
+    const fs = new SecureFs({ root: this.workspaceDir });
 
     // Initialize bash environment
     this.bash = new Bash({
