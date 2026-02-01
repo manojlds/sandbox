@@ -18,6 +18,9 @@
     "type": "git",
     "url": "https://github.com/manojlds/heimdall.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
