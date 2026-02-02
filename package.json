@@ -1,18 +1,25 @@
 {
-  "name": "heimdall",
+  "name": "@heimdall-ai/heimdall",
   "version": "0.1.0",
   "description": "Heimdall - MCP server providing sandboxed Python and Bash execution",
   "type": "module",
   "main": "dist/server.js",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "author": "manojlds",
   "bin": {
     "heimdall-mcp": "dist/server.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/manojlds/heimdall.git",
-    "directory": "mcp/heimdall"
+    "url": "https://github.com/manojlds/heimdall.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
