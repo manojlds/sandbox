@@ -1,6 +1,6 @@
 {
   "name": "@heimdall-ai/heimdall",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Heimdall - MCP server providing sandboxed Python and Bash execution",
   "type": "module",
   "main": "dist/server.js",
